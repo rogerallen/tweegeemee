@@ -6,12 +6,12 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
 
 ## To Do
 
-* [-] create images
+* [x] create images
 ** [x] show images
 ** [x] allow for errors during creation
-** [] check that image isn't just black
-** [] save image as file
-* [] post images
+** [x] check that image isn't just black
+** [x] save image as file
+* [x] post images
 * [] read twitter favorites & retweets
 * [] breed new images
 
