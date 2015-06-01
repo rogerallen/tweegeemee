@@ -12,8 +12,9 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
 ** [x] check that image isn't just black
 ** [x] save image as file
 * [x] post images
-* [] read twitter favorites & retweets
-* [] breed new images
+* [x] read twitter favorites & retweets
+* [x] breed new images
+** [] 140 characters is too constraining :^( Use gists
 
 ## Usage
 

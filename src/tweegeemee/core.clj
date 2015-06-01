@@ -17,6 +17,9 @@
 
 (def my-screen-name (env :screen-name))
 
+(def my-gist-auth (env :gist-auth))
+(def my-gist-archive-id (env :gist-archive-id))
+
 (def test-size 16)
 (def full-size 720)
 
@@ -126,7 +129,7 @@
   "will the code fit in a tweet? does it have at least one paren?"
   [code]
   (let [code-str (str code)]
-    (and (< (count code-str) 139)
+    (and (< (count code-str) (- 140 24)) ;; - link to http://t.co/0123456789
          (>= (count (filter #(= % \( ) code-str)) 1))))
 
 (defn good-image?
@@ -186,44 +189,97 @@
      :body [(tw-req/file-body-part the-image-filename)
             (tw-req/status-body-part (str the-code))])
     (catch Exception e
+      ;; FIXME -- why does this always have a remote-closed exception?
       (prn "caught exception" e)))
   (prn "waiting for a bit...")
   (Thread/sleep 5000))
 
-(defn post-batch-to-twitter
+(defn post-randoms-to-twitter
+  "Post a batch of 5 random codes & images to twitter"
   []
   (dorun
    (doseq [f "abcde"]
      (let [[c f] (get-good-random-code-and-png f)]
        (post-to-twitter c f)))))
 
+(defn score-status
+  "retweets count more than favorites"
+  [status]
+  (+ (* 3 (:retweet_count status)) (:favorite_count status)))
+
+(defn get-top-scoring-codes
+  []
+  (let [statuses (->> (:body (tw/statuses-user-timeline
+                              :oauth-creds my-creds
+                              :params {:count 10
+                                       :screen-name my-screen-name}))
+                      (map #(assoc % :text
+                                   (clojure.string/replace (:text %) #" http.*" "")))
+                      (filter #(good-random-code? (:text %)))
+                      (map #(assoc % :score (score-status %)))
+                      (sort-by :score)
+                      (reverse)
+                      (take 2)
+                      (map :text)
+                      (map read-string))] ;; DANGER!! FIXME sanity check!!
+    statuses))
+
+(defn get-good-random-child
+  [code0 code1]
+  (let [good-image (atom false)
+        good-code (atom nil)]
+    (while (not @good-image)
+      (try
+        (let [gc (breed code0 code1)
+              _ (prn gc)
+              _ (when (not (good-random-code? gc))
+                  (/ 0)) ;; cause exception
+              img (image (eval gc) :size test-size)]
+          ;; no exception
+          (when (good-image? img)
+            (reset! good-image true)
+            (reset! good-code gc)))
+        (catch Exception e
+          (prn "not good code" e)
+          nil)))
+    @good-code))
+
+(defn get-good-random-child-and-png
+  [code0 code1 suffix]
+  (let [my-code (get-good-random-child code0 code1)
+        my-filename (get-png-file-name suffix)
+        my-image (image (eval my-code) :size full-size)] ;; AA?
+     (write-png my-filename my-image)
+    [my-code my-filename]))
+
+(defn post-children-to-twitter
+  "Post a batch of 5 random codes & images to twitter"
+  []
+  (let [[c0 c1] (get-top-scoring-codes)]
+    (dorun
+     (doseq [f "ABCDE"]
+       (let [[c f] (get-good-random-child-and-png c0 c1 f)
+             _ (prn c)]
+         nil;;(post-to-twitter c f)
+         )))))
+
+
 (comment
 
-  ;; breed
-  (let [gc0 (random-code 10)
-        gc1 (random-code 10)
-        gc (breed gc0 gc1)
-        _ (println "\n" gc "\n")]
-    (show (eval gc)))
-
-  (show (vsin (vfloor (vfloor (v* [-0.4504424629647603] pos)))))
-
-  ;; CLISK STUFF ==========================================
-
-  (show (v- (v* 2 pos) [1 1]) :size 720)
-  (show (eval '(v- (v* 2 pos) [1 1])) :size 720)
-  (show (vabs (v- (v* 2 pos) [1 1]))
-        :size 720)
-
-  (show (offset
-         (v* 0.1 (scale 0.03 vsnoise))
-         (rgb-from-hsl (v+ [0 0 0.5] (scale 0.3 vsnoise))))
-        :size 512)
-
-
-  (def checker-pattern (checker 0 1))
-  (show  (scale 0.25 (offset (v* 6 vnoise) (v* vnoise checker-pattern)) )
-         :size 720)
+  ;; GIST STUFF ===========================================
+  (require '[clojure.pprint :as pp])
+  (require '[tentacles.users :as users])
+  (pp/pprint (users/user "rogerallen"))
+  (pp/pprint (users/me {:auth my-gist-auth}))
+  (require '[tentacles.gists :as my-gist-auth])
+  (pp/pprint (gists/specific-gist my-gist-archive-id))
+  (gists/edit-gist my-gist-archive-id
+                   { :auth my-gist-auth
+                    :files
+                    { "README.txt"
+                      { :content "Archive the code for https://twitter.com/tweegeemee.\nThis was edited." },
+                      "TEST.txt"
+                      { :content "a new file" }}})
 
   ;; TWITTER STUFF ========================================
 
@@ -257,5 +313,8 @@
    :oauth-creds my-creds
    :body [(tw-req/file-body-part "test0004.png")
           (tw-req/status-body-part "An image to start with")])
+
+
+  (U0 (B3 (B2 [-0.658 -0.552] (B3 (U3 (Ua (Uc (U8 0.045)))) (Uc (Uc T0)))) (B4 0.328 (B5 -0.228 (U6 (U9 T1)))))) ;; 110 in length 140-24 = 116
 
   )

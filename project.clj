@@ -6,5 +6,6 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [twitter-api "0.7.8"]
                  [environ "1.0.0"]
-                 [net.mikera/clisk "0.10.0"]]
+                 [net.mikera/clisk "0.10.0"]
+                 [tentacles "0.3.0"]]
   :plugins [[lein-environ "1.0.0"]])
