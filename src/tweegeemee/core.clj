@@ -5,7 +5,8 @@
             [twitter.request :as tw-req]
             [environ.core :refer [env]]
             [clojure.zip :as zip]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [tentacles.gists :as gists])
   (:import [java.io File]
            [javax.imageio ImageIO]))
 
@@ -24,35 +25,10 @@
 (def full-size 720)
 
 ;; Functions for use in creating imagery.  Get more in clisk
-;;(def unary-fns #{'vsin 'vcos 'vabs 'vround 'vfloor 'vfrac
-;;                 'square 'vsqrt 'sigmoid 'max-component 'min-component
-;;                 'length 'normalize})
-;;(def binary-fns #{'v+ 'v* 'v- 'vdivide 'vmin 'vmax})
-;; aliases for tweetablity
-(def U0 vsin)
-(def U1 vcos)
-(def U2 vabs)
-(def U3 vround)
-(def U4 vfloor)
-(def U5 vfrac)
-(def U6 square)
-(def U7 vsqrt)
-(def U8 sigmoid)
-(def U9 max-component)
-(def Ua min-component)
-(def Ub length)
-(def Uc normalize)
-(def B0 v+)
-(def B1 v*)
-(def B2 v-)
-(def B3 vdivide)
-(def B4 vmin)
-(def B5 vmax)
-(def T0 pos)
-(def T1 noise)
-(def T2 snoise)
-(def unary-fns #{'U0 'U1 'U2 'U3 'U4 'U5 'U6 'U7 'U8 'U9 'Ua 'Ub 'Uc})
-(def binary-fns #{'B0 'B1 'B2 'B3 'B4 'B5})
+(def unary-fns #{'vsin 'vcos 'vabs 'vround 'vfloor 'vfrac
+                 'square 'vsqrt 'sigmoid 'max-component 'min-component
+                 'length 'normalize})
+(def binary-fns #{'v+ 'v* 'v- 'vdivide 'vmin 'vmax})
 (def fns (set/union unary-fns binary-fns))
 
 (defn random-fn
@@ -126,11 +102,10 @@
     (replace-loc loc1 loc2)))
 
 (defn good-random-code?
-  "will the code fit in a tweet? does it have at least one paren?"
+  "does it have at least one paren?"
   [code]
   (let [code-str (str code)]
-    (and (< (count code-str) (- 140 24)) ;; - link to http://t.co/0123456789
-         (>= (count (filter #(= % \( ) code-str)) 1))))
+    (and (>= (count (filter #(= % \( ) code-str)) 1))))
 
 (defn good-image?
   "is the image not a constant color?"
@@ -162,45 +137,76 @@
 
 (defn write-png
   ""
-  [file-name the-image]
-  (ImageIO/write the-image "png" (File. file-name)))
+  [filename the-image]
+  (ImageIO/write the-image "png" (File. filename)))
 
-(defn- get-png-file-name
-  [suffix]
-  (str "images/"
-       (.format (java.text.SimpleDateFormat. "yyMMdd_HHmmss")
-                (System/currentTimeMillis))
-       "_" suffix ".png"))
+(defn- get-timestamp-str
+  []
+  (.format (java.text.SimpleDateFormat. "yyMMdd_HHmmss") (System/currentTimeMillis)))
 
-(defn get-good-random-code-and-png
-  [suffix]
+(defn- get-png-filename
+  [timestamp suffix]
+  (str "images/" timestamp "_" suffix ".png"))
+
+(defn- get-clj-filename
+  [timestamp suffix]
+  (str "images/" timestamp "_" suffix ".clj"))
+
+(defn- get-clj-basename
+  [timestamp suffix]
+  (str timestamp "_" suffix ".clj"))
+
+(defn make-random-code-and-png
+  [timestamp suffix]
   (let [my-code (get-good-random-code)
-        my-filename (get-png-file-name suffix)
-        my-image (image (eval my-code) :size full-size)] ;; AA?
-     (write-png my-filename my-image)
-    [my-code my-filename]))
+        png-filename (get-png-filename timestamp suffix)
+        my-image (image (eval my-code) :size full-size) ;; FIXME AA?
+        clj-filename (get-clj-filename timestamp suffix)
+        clj-basename (get-clj-basename timestamp suffix)]
+    (write-png png-filename my-image)
+    (spit clj-filename (str my-code))
+    [my-code clj-basename png-filename]))
 
 (defn post-to-twitter
-  [the-code the-image-filename]
-  (prn (count (str the-code)) "-" (str the-code) "-")
+  [status-text the-image-filename]
   (try
-    (tw/statuses-update-with-media
-     :oauth-creds my-creds
-     :body [(tw-req/file-body-part the-image-filename)
-            (tw-req/status-body-part (str the-code))])
+    (if false
+      (prn "NOT posting to twitter" status-text)
+      (tw/statuses-update-with-media
+       :oauth-creds my-creds
+       :body [(tw-req/file-body-part the-image-filename)
+              (tw-req/status-body-part status-text)]))
     (catch Exception e
       ;; FIXME -- why does this always have a remote-closed exception?
-      (prn "caught exception" e)))
+      (prn "caught twitter exception" e)))
   (prn "waiting for a bit...")
   (Thread/sleep 5000))
 
-(defn post-randoms-to-twitter
+(defn append-to-gist
+  [filename content]
+  (gists/edit-gist
+   my-gist-archive-id
+   {:auth my-gist-auth
+    :files { filename { :content content }}}))
+;; (append-to-gist "TEST.txt" "another test 1")
+
+(defn post-to-web
+  [the-code clj-filename png-filename]
+  (let [status-text (str clj-filename " https://gist.githubusercontent.com/rogerallen/"
+                         my-gist-archive-id "/raw/" clj-filename)]
+  (append-to-gist clj-filename (str the-code))
+  (post-to-twitter status-text png-filename)))
+
+(defn post-random-batch-to-web
   "Post a batch of 5 random codes & images to twitter"
   []
-  (dorun
-   (doseq [f "abcde"]
-     (let [[c f] (get-good-random-code-and-png f)]
-       (post-to-twitter c f)))))
+  (let [timestamp-str (get-timestamp-str)]
+    (dorun
+     (doseq [suffix "abcde"]
+       (let [[the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)]
+         (post-to-web the-code clj-filename png-filename))))))
+
+;; FIXME BELOW!!!!
 
 (defn score-status
   "retweets count more than favorites"
@@ -247,7 +253,7 @@
 (defn get-good-random-child-and-png
   [code0 code1 suffix]
   (let [my-code (get-good-random-child code0 code1)
-        my-filename (get-png-file-name suffix)
+        my-filename (get-png-filename suffix)
         my-image (image (eval my-code) :size full-size)] ;; AA?
      (write-png my-filename my-image)
     [my-code my-filename]))
@@ -271,7 +277,7 @@
   (require '[tentacles.users :as users])
   (pp/pprint (users/user "rogerallen"))
   (pp/pprint (users/me {:auth my-gist-auth}))
-  (require '[tentacles.gists :as my-gist-auth])
+  (require '[tentacles.gists :as gists])
   (pp/pprint (gists/specific-gist my-gist-archive-id))
   (gists/edit-gist my-gist-archive-id
                    { :auth my-gist-auth

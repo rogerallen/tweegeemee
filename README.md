@@ -7,14 +7,16 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
 ## To Do
 
 * [x] create images
-** [x] show images
-** [x] allow for errors during creation
-** [x] check that image isn't just black
-** [x] save image as file
+ * [x] show images
+ * [x] allow for errors during creation
+ * [x] check that image isn't just black
+ * [x] save image as file
 * [x] post images
+ * [x] 140 characters is too constraining--use gists
 * [x] read twitter favorites & retweets
-* [x] breed new images
-** [] 140 characters is too constraining :^( Use gists
+* [ ] breed new images
+* [ ] hook up to heroku
+* [ ] profit!
 
 ## Usage
 
