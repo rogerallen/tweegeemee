@@ -52,11 +52,11 @@
   []
   (let [r (rand)]
     (if (< r 0.10)
-      'T0
+      'pos
       (if (< r 0.15)
-        'T1
+        'noise
       (if (< r 0.2)
-        'T2
+        'snoise
         (if (< r 0.5)
           (rand-value)
           (if (< r 0.75)
@@ -117,9 +117,12 @@
 
 (defn get-good-random-code
   []
-  (let [good-image (atom false)
+  (let [cur-count (atom 0)
+        good-image (atom false)
         good-code (atom nil)]
-    (while (not @good-image)
+    (while (and (< @cur-count 100)
+                (not @good-image))
+      (swap! cur-count inc)
       (try
         (let [gc (random-code 10)
               _ (when (not (good-random-code? gc))
@@ -160,7 +163,7 @@
   [timestamp suffix]
   (let [my-code (get-good-random-code)
         png-filename (get-png-filename timestamp suffix)
-        my-image (image (eval my-code) :size full-size) ;; FIXME AA?
+        my-image (image (eval my-code) :size full-size)
         clj-filename (get-clj-filename timestamp suffix)
         clj-basename (get-clj-basename timestamp suffix)]
     (write-png png-filename my-image)
@@ -206,38 +209,55 @@
        (let [[the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)]
          (post-to-web the-code clj-filename png-filename))))))
 
-;; FIXME BELOW!!!!
-
 (defn score-status
   "retweets count more than favorites"
   [status]
   (+ (* 3 (:retweet_count status)) (:favorite_count status)))
 
-(defn get-top-scoring-codes
+(defn sanity-check-code
+  "be careful with strange code you download from the web, son.  Only
+  allow fns in the set of fns we know about."
+  [code-str]
+  (let [code-fns (->> (re-seq #"\(.+? " code-str)
+                      (map #(symbol
+                             (clojure.string/replace % #"[\( ]" ""))))
+        code-fn-set (set code-fns)]
+    (set/subset? code-fn-set fns)))
+
+(defn get-parent-tweet-codes
+  "return a sequence of the highest-scoring two tweets code"
   []
-  (let [statuses (->> (:body (tw/statuses-user-timeline
+  (let [archive  (gists/specific-gist my-gist-archive-id)
+        statuses (->> (:body (tw/statuses-user-timeline
                               :oauth-creds my-creds
-                              :params {:count 10
+                              :params {:count 12
                                        :screen-name my-screen-name}))
                       (map #(assoc % :text
                                    (clojure.string/replace (:text %) #" http.*" "")))
-                      (filter #(good-random-code? (:text %)))
+                      (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w.clj" (:text %)))
                       (map #(assoc % :score (score-status %)))
                       (sort-by :score)
                       (reverse)
                       (take 2)
                       (map :text)
-                      (map read-string))] ;; DANGER!! FIXME sanity check!!
+                      (map #(-> (:files archive)
+                                ((keyword %))
+                                :content))
+                      (filter sanity-check-code)
+                      (map read-string))]
     statuses))
 
-(defn get-good-random-child
+(defn make-random-child
   [code0 code1]
-  (let [good-image (atom false)
+  (let [cur-count (atom 0)
+        good-image (atom false)
         good-code (atom nil)]
-    (while (not @good-image)
+    (while (and (< @cur-count 100)
+                (not @good-image))
+      (swap! cur-count inc)
       (try
         (let [gc (breed code0 code1)
-              _ (prn gc)
+              _ (prn @cur-count ":" gc)
               _ (when (not (good-random-code? gc))
                   (/ 0)) ;; cause exception
               img (image (eval gc) :size test-size)]
@@ -250,77 +270,38 @@
           nil)))
     @good-code))
 
-(defn get-good-random-child-and-png
-  [code0 code1 suffix]
-  (let [my-code (get-good-random-child code0 code1)
-        my-filename (get-png-filename suffix)
-        my-image (image (eval my-code) :size full-size)] ;; AA?
-     (write-png my-filename my-image)
-    [my-code my-filename]))
+(defn make-random-child-and-png
+  [code0 code1 timestamp suffix]
+  (let [my-code (make-random-child code0 code1)]
+    (if (nil? my-code)
+      [nil nil nil]
+      (let [png-filename (get-png-filename timestamp suffix)
+            my-image (image (eval my-code) :size full-size)
+            clj-filename (get-clj-filename timestamp suffix)
+            clj-basename (get-clj-basename timestamp suffix)]
+        (write-png png-filename my-image)
+        (spit clj-filename (str my-code))
+        [my-code clj-basename png-filename]))))
 
-(defn post-children-to-twitter
+(defn post-children-to-web
   "Post a batch of 5 random codes & images to twitter"
   []
-  (let [[c0 c1] (get-top-scoring-codes)]
+  (let [timestamp-str (get-timestamp-str)
+        [c0 c1] (get-parent-tweet-codes)]
     (dorun
-     (doseq [f "ABCDE"]
-       (let [[c f] (get-good-random-child-and-png c0 c1 f)
-             _ (prn c)]
-         nil;;(post-to-twitter c f)
-         )))))
+     (doseq [suffix "ABCDE"]
+       (let [[the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
+         (if (nil? the-code)
+           (prn "!!! suffix" suffix "unable to create image")
+           (post-to-web the-code clj-filename png-filename)))))))
 
 
 (comment
+  (post-random-batch-to-web)
 
-  ;; GIST STUFF ===========================================
-  (require '[clojure.pprint :as pp])
-  (require '[tentacles.users :as users])
-  (pp/pprint (users/user "rogerallen"))
-  (pp/pprint (users/me {:auth my-gist-auth}))
-  (require '[tentacles.gists :as gists])
-  (pp/pprint (gists/specific-gist my-gist-archive-id))
-  (gists/edit-gist my-gist-archive-id
-                   { :auth my-gist-auth
-                    :files
-                    { "README.txt"
-                      { :content "Archive the code for https://twitter.com/tweegeemee.\nThis was edited." },
-                      "TEST.txt"
-                      { :content "a new file" }}})
+  (get-parent-tweet-codes)
 
-  ;; TWITTER STUFF ========================================
-
-  ;; got some info about me
-  (tw/users-show :oauth-creds my-creds
-                 :params {:screen-name my-screen-name})
-
-  (def last-status-id (-> (tw/users-show :oauth-creds my-creds
-                                         :params {:screen-name my-screen-name})
-                          :body
-                          :status
-                          :id))
-  last-status-id
-
-  ;; get statuses & favorites
-  (defn print-last-n-statuses [N]
-    (doall (doseq [s (:body (tw/statuses-user-timeline
-                             :oauth-creds my-creds
-                             :params {:count N
-                                      :screen-name my-screen-name}))]
-             (println (:retweet_count s) (:favorite_count s) (:text s)))))
-  (print-last-n-statuses 5)
-
-  ;; coolio
-  (tw/statuses-update
-   :oauth-creds my-creds
-   :params {:status "Testing a post from the REPL."})
-
-  ;; double-coolio
-  (tw/statuses-update-with-media
-   :oauth-creds my-creds
-   :body [(tw-req/file-body-part "test0004.png")
-          (tw-req/status-body-part "An image to start with")])
-
-
-  (U0 (B3 (B2 [-0.658 -0.552] (B3 (U3 (Ua (Uc (U8 0.045)))) (Uc (Uc T0)))) (B4 0.328 (B5 -0.228 (U6 (U9 T1)))))) ;; 110 in length 140-24 = 116
+  (post-children-to-web)
+  ;; so far children are unexciting.  :(
 
   )

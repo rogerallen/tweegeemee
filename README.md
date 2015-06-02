@@ -2,7 +2,9 @@
 
 A Clojure library designed to breed images via twitter.
 
-So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com/papers/siggraph91.html, https://github.com/nodename/clevolution, https://github.com/mikera/clisk, http://www.thattommyhall.com/2013/08/23/genetic-programming-in-clojure-with-zippers/ for ideas.
+See https://twitter.com/tweegeemee/media for the latest images.
+
+So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com/papers/siggraph91.html, https://github.com/nodename/clevolution, https://github.com/mikera/clisk, http://www.thattommyhall.com/2013/08/23/genetic-programming-in-clojure-with-zippers/ and http://blog.raynes.me/blog/2011/12/02/waving-our-tentacles/ for ideas.
 
 ## To Do
 
@@ -14,7 +16,10 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
 * [x] post images
  * [x] 140 characters is too constraining--use gists
 * [x] read twitter favorites & retweets
-* [ ] breed new images
+* [x] breed new images
+* [ ] fill out all the missing functions.
+* [ ] add mutation, too.
+* [ ] prove out that we can create interesting children
 * [ ] hook up to heroku
 * [ ] profit!
 
