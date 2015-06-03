@@ -17,7 +17,7 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
  * [x] 140 characters is too constraining--use gists
 * [x] read twitter favorites & retweets
 * [x] breed new images
-* [ ] fill out all the missing functions.
+* [/] fill out all the missing functions.
 * [ ] add mutation, too.
 * [ ] prove out that we can create interesting children
 * [ ] hook up to heroku
