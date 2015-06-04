@@ -8,4 +8,6 @@
                  [environ "1.0.0"]
                  [net.mikera/clisk "0.10.0"]
                  [tentacles "0.3.0"]]
-  :plugins [[lein-environ "1.0.0"]])
+  :plugins [[lein-environ "1.0.0"]]
+  :jvm-opts ^:replace [] ;; Enable full optimizer
+  )
