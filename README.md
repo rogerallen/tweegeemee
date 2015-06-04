@@ -4,7 +4,7 @@ A Clojure library designed to breed images via twitter.
 
 See https://twitter.com/tweegeemee/media for the latest images.
 
-So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com/papers/siggraph91.html, https://github.com/nodename/clevolution, https://github.com/mikera/clisk, http://www.thattommyhall.com/2013/08/23/genetic-programming-in-clojure-with-zippers/ and http://blog.raynes.me/blog/2011/12/02/waving-our-tentacles/ for ideas.
+So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com/papers/siggraph91.html, https://github.com/nodename/clevolution, https://github.com/mikera/clisk, http://www.thattommyhall.com/2013/08/23/genetic-programming-in-clojure-with-zippers/ and http://blog.raynes.me/blog/2011/12/02/waving-our-tentacles/ for ideas, code and inspiration.
 
 ## To Do
 
@@ -14,14 +14,16 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
  * [x] check that image isn't just black
  * [x] save image as file
 * [x] post images
- * [x] 140 characters is too constraining--use gists
+ * [x] 140 characters is too constraining--use gists for code
+ * [ ] too many files in a gist makes it unreadable.  Use 1 file & append?
 * [x] read twitter favorites & retweets
 * [x] breed new images
-* [/] fill out all the missing functions.
+* [x] fill out all the missing functions.
+ * [ ] constrain the creation process to select and use only a few functions.  More choices are not making better images.
 * [ ] add mutation, too.
 * [ ] prove out that we can create interesting children
 * [ ] hook up to heroku
-* [ ] profit!
+* [ ] profit! (ha)
 
 ## Usage
 

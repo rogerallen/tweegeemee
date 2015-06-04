@@ -10,26 +10,32 @@
   (:import [java.io File]
            [javax.imageio ImageIO]))
 
+;; ======================================================================
+;; add these keys to your profiles.clj (AND DON'T CHECK THAT FILE IN!)
 (def my-creds (tw-oauth/make-oauth-creds
-               (env :app-consumer-key)
+               (env :app-consumer-key)          ;; all from api.twitter.com
                (env :app-consumer-secret)
                (env :user-access-token)
                (env :user-access-secret)))
+(def my-screen-name     (env :screen-name))     ;; twitter screen name
+(def my-gist-auth       (env :gist-auth))       ;; gist username:password
+(def my-gist-archive-id (env :gist-archive-id)) ;; create this archive
 
-(def my-screen-name (env :screen-name))
-
-(def my-gist-auth (env :gist-auth))
-(def my-gist-archive-id (env :gist-archive-id))
-
+;; ======================================================================
 (def min-color-value 32)      ;; not too dark
 (def min-color-difference 10) ;; not too similar
 (def test-size 16)
 (def full-size 720)
+(def max-code-depth 6)
 
-;; Functions for use in creating imagery.  Get more in clisk
-;;(def checker-pattern (checker 0 1)) ;; too much checker!
-(def term-fns #{'pos
-                'noise 'snoise 'plasma 'splasma
+;; Functions for use in creating imagery.
+(declare random-value)
+(defn- random-scalar [] (random-value))
+(defn- random-vec2 [] [(random-value) (random-value)])
+(defn- random-vec3 [] [(random-value) (random-value) (random-value)])
+(defn- random-vec4 [] [(random-value) (random-value) (random-value) (random-value)])
+(def term-vals #{'pos random-scalar random-vec2 random-vec3 random-vec4})
+(def term-fns #{'noise 'snoise 'plasma 'splasma
                 'vnoise 'vsnoise 'vplasma 'vsplasma
                 'grain 'turbulence 'vturbulence
                 'spots 'blotches})
@@ -42,9 +48,14 @@
 (def binary-fns #{'v+ 'v* 'v- 'vdivide 'vpow 'vmod 'dot 'cross3
                   'vmin 'vmax 'checker 'scale 'offset
                   'adjust-hue 'adjust-hsl 'vconcat})
-(def ternary-fns #{'lerp 'clamp })
+(def ternary-fns #{'lerp 'clamp})
 (def fns (set/union unary-fns binary-fns ternary-fns))
+;; Probabilities
+(def prob-term-fn    0.1)  ;; vs terminal values
+(def prob-ternary-fn 0.02) ;; vs. binary or unary
+(def prob-binary-fn  0.3)  ;; vs ternary or unary
 
+;; ======================================================================
 (defn- random-fn
   "return a random function.  Parameter n selects either 1 or 2 parameters."
   [n]
@@ -66,31 +77,25 @@
 (defn- random-terminal
   "return a random terminal value: vectors, position, or noise."
   []
-  (let [r (rand)]
-    (if (< r 0.2)
-      (rand-nth (seq term-fns))
-      (if (< r 0.4)
-        (random-value)
-        (if (< r 0.6)
-          [(random-value) (random-value)]
-          (if (< r 0.8)
-            [(random-value) (random-value) (random-value)]
-            [(random-value) (random-value) (random-value) (random-value)]))))))
+  (if (< (rand) prob-term-fn)
+    (rand-nth (seq term-fns))
+    (let [x (rand-nth (seq term-vals))]
+      (if (not= x 'pos) (x) x))))
 ;;(random-terminal)
 
 (defn- random-code
-  "return a random s-expression made up of functions or terminals"
+  "Recursively create & return a random s-expression made up of
+  functions or terminals. When depth=0, create a terminal to control
+  the size.  Create terminal fn with increasing probability as depth
+  gets smaller.  Functions are not parameter-checked so runtime
+  exceptions can be expected."
   ([depth]
-   (if (and (> depth 0)
-            (> (rand-int depth) 0))
-     (if (< (rand) 0.02)
-       (cons (random-fn 3)
-             (repeatedly 3 #(random-code (dec depth))))
-       (if (< (rand) 0.5)
-         (cons (random-fn 2)
-               (repeatedly 2 #(random-code (dec depth))))
-         (cons (random-fn 1)
-               (repeatedly 1 #(random-code (dec depth))))))
+   (if (and (> depth 0) (> (rand-int depth) 0))
+     (if (< (rand) prob-ternary-fn)
+       (cons (random-fn 3) (repeatedly 3 #(random-code (dec depth))))
+       (if (< (rand) prob-binary-fn)
+         (cons (random-fn 2) (repeatedly 2 #(random-code (dec depth))))
+         (cons (random-fn 1) (repeatedly 1 #(random-code (dec depth))))))
      (random-terminal))))
 ;;(random-code 5)
 
@@ -115,6 +120,8 @@
   [L R]
   (let [loc1 (rand-nth (locs L))
         loc2 (rand-nth (locs R))]
+    ;;(println "\nLOC1" loc1)
+    ;;(println "\nLOC2" loc2)
     (replace-loc loc1 loc2)))
 
 (defn- mutate
@@ -162,9 +169,7 @@
     (and (> max-v min-color-value)
          (> (- max-v min-v) min-color-difference))))
 
-(defn third
-  [x]
-  (nth x 2))
+(defn- third [x] (nth x 2))
 
 (defn- good-image?
   "is the image not a constant color?"
@@ -190,9 +195,9 @@
       (swap! cur-count inc)
       (try
         (let [cur-code (code-creator-fn)
+              ;;_ (println "\n??" cur-code)
               _ (when (not (good-random-code? cur-code))
                   (throw (Exception. "badly created code"))) ;; cause exception
-              ;;_ (prn cur-code)
               img (image (eval cur-code) :size test-size)]
           ;; no exception
           (if (good-image? img)
@@ -209,7 +214,7 @@
 (defn- get-random-code
   "get a good image-creation code created randomly"
   []
-  (get-good-code* (fn [] (random-code 10))))
+  (get-good-code* (fn [] (random-code max-code-depth))))
 
 (defn- write-png
   "write the-image to filename (which should have a .png suffix)"
@@ -233,6 +238,7 @@
   (str timestamp "_" suffix ".clj"))
 
 (defn- make-random-code-and-png
+  "make random code and save as files. return the code, clj-filename and png-filename"
   [timestamp suffix]
   (let [my-code (get-random-code)
         png-filename (get-png-filename timestamp suffix)
@@ -247,15 +253,15 @@
   [status-text the-image-filename]
   (try
     (if false
-      (prn "NOT posting to twitter" status-text)
+      (println "NOT posting to twitter" status-text)
       (tw/statuses-update-with-media
        :oauth-creds my-creds
        :body [(tw-req/file-body-part the-image-filename)
               (tw-req/status-body-part status-text)]))
     (catch Exception e
       ;; FIXME -- why does this always have a remote-closed exception?
-      (prn "caught twitter exception" e)))
-  (prn "waiting for a bit...")
+      (println "caught twitter exception" e)))
+  (println "waiting for a bit...")
   (Thread/sleep 5000))
 
 (defn- append-to-gist
@@ -317,6 +323,7 @@
   (get-good-code* (fn [] (breed code0 code1))))
 
 (defn- make-random-child-and-png
+  "take 2 codes, breed them and save as files. return the code, clj-filename and png-filename"
   [code0 code1 timestamp suffix]
   (let [my-code (get-random-child code0 code1)]
     (if (nil? my-code)
@@ -334,7 +341,7 @@
 ;; ======================================================================
 
 (defn post-random-batch-to-web
-  "Post a batch of 5 random codes & images to twitter"
+  "Post a batch of 5 random codes & images to twitter and github."
   []
   (let [timestamp-str (get-timestamp-str)]
     (dorun
@@ -343,7 +350,8 @@
          (post-to-web the-code clj-filename png-filename))))))
 
 (defn post-children-to-web
-  "Post a batch of 5 random codes & images to twitter"
+  "Find the highest-scoring parents, post a batch of 5 codes & images
+  bred from those parents to twitter and github"
   []
   (let [timestamp-str (get-timestamp-str)
         [c0 c1] (get-parent-tweet-codes)]
@@ -351,11 +359,11 @@
      (doseq [suffix "ABCDE"]
        (let [[the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
          (if (nil? the-code)
-           (prn "!!! suffix" suffix "unable to create image")
+           (println "!!! suffix" suffix "unable to create image")
            (post-to-web the-code clj-filename png-filename)))))))
 
 
-(comment
+(comment ;; code below to test things out
   ;; generate & show a random image
   (let [c (get-random-code)
         _ (println c)]
@@ -364,13 +372,11 @@
   ;; Careful!
   (post-random-batch-to-web)
 
-  (println (get-parent-tweet-codes))
-
-  (def dad 'x
-    )
-  (def mom 'x
-    )
-
+  ;; breed things by hand...
+  (def rents (get-parent-tweet-codes))
+  (def dad (first rents))
+  (def mom (second rents))
+  (def mom '(vfrac (offset (dot (vmod (vfrac (alpha (z (vsqrt (x vsplasma))))) [-9.5645 -4.0767 2.8253]) 2.4199) (lightness-from-rgb snoise))))
   (show (eval dad))
   (show (eval mom))
   (let [c (get-random-child dad mom)
@@ -378,7 +384,9 @@
     (if (not (nil? c))
       (show (eval c))))
 
+  ;; Careful!
   (post-children-to-web)
-  ;; so far children are unexciting.  :(
+
+  ;; (vfrac (offset (dot (vmod (vfrac (alpha (z (vsqrt (x vsplasma))))) [-9.5645 -4.0767 2.8253]) 2.4199) (lightness-from-rgb snoise)))
 
   )
