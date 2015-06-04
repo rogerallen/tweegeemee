@@ -100,13 +100,19 @@
 ;;(random-code 5)
 
 (defn- locs
-  "return all zip locations within the s-expression.  each location
-  contains the full context within the tree for use in replacement
-  later."
+  "return all zip locations within the s-expression.  each location contains the
+  full context within the tree for use in replacement later."
   [G]
   (let [zipper (zip/seq-zip G)
         all-locs (take-while (complement zip/end?) (iterate zip/next zipper))]
-    (filter #(not (fns (zip/node %))) all-locs)))
+    all-locs))
+
+(defn- locs-ex-fns
+  "return all zip locations within the s-expression--but not
+  functions, only s-expr and the operands.  each location contains the
+  full context within the tree for use in replacement later."
+  [G]
+  (filter #(not (fns (zip/node %))) (locs G)))
 
 (defn- replace-loc
   "replace the location loc1 with the location loc2, returning the root (full
@@ -114,44 +120,91 @@
   [loc1 loc2]
   (zip/root (zip/replace loc1 (zip/node loc2))))
 
+(defn- replace-loc-with-node
+  "replace the location loc1 with the location loc2, returning the root (full
+  s-expression) of loc1."
+  [loc1 node2]
+  (zip/root (zip/replace loc1 node2)))
+
 (defn- breed
   "find a random expression in L to replace with a random expression
   in R.  replace it within L and return a new L s-expression."
   [L R]
-  (let [loc1 (rand-nth (locs L))
-        loc2 (rand-nth (locs R))]
+  (let [loc1 (rand-nth (locs-ex-fns L))
+        loc2 (rand-nth (locs-ex-fns R))]
     ;;(println "\nLOC1" loc1)
     ;;(println "\nLOC2" loc2)
     (replace-loc loc1 loc2)))
 
+(defn- mutate-just-a-node
+  [node]
+  (if (term-vals node)
+    ;; must be pos--offset it
+    (cons 'v+ (cons (random-vec2) '(pos)))
+    (if (term-fns node)
+      (rand-nth (seq term-fns))
+      (if (unary-fns node)
+        (rand-nth (seq unary-fns))
+        (if (binary-fns node)
+          (rand-nth (seq binary-fns))
+          (if (ternary-fns node)
+            (rand-nth (seq ternary-fns))
+            (println "UNEXPECTED NODE:" node)))))))
+
+(defn- mutate-node
+  [node]
+  (if (< (rand) 0.95) ;; mostly mutate here
+    (condp = (type node)
+      ;;* If the node is a scalar value, it can be adjusted by the
+      ;;addition of some random amount.
+      java.lang.Double
+      (+ node (random-value))
+      ;;* If the node is a vector, it can be adjusted by adding random
+      ;;amounts to each element.
+      clojure.lang.PersistentVector
+      (vec (map #(+ % (random-value)) node))
+      ;;* If the node is a function, it can mutate into a different
+      ;;function. For example (abs X) might become (cos X). If this
+      ;;mutation occurs, the arguments of the function are also adjusted
+      ;;if necessary to the correct number and types.
+      ;;[I will keep to same function type]
+      clisk.node.Node
+      (mutate-just-a-node node)
+      clojure.lang.Symbol
+      (mutate-just-a-node node)
+      clojure.lang.PersistentList
+      (if (< (rand) 0.5)
+        ;; variation on above
+        (cons (mutate-just-a-node (first node)) (rest node))
+        ;;* An argument to a function can jump out and become the new value
+        ;;for that node. For example (* X .3) might become X. This is the
+        ;;inverse of the previous [next] type of mutation.
+        (rand-nth (rest node)))
+      (println "UNEXPECTED TYPE:" node (class node))
+      )
+    ;;[See mutate fn]* Finally, a node can become a copy of another node from the
+    ;;parent expression. For example (+ (abs X) (* Y .6)) might
+    ;;become (+ (abs (* Y .6)) (* Y .6)). This causes effects similar to
+    ;;those caused by mating an expression with itself. It allows for
+    ;;sub-expressions to duplicate themselves within the overall
+    ;;expression.
+    nil))
+;;[TBD]* An expression can become the argument to a new random
+;;function. Other arguments are generated at random if
+;;necessary. For example X might become (* X .3).
+
 (defn- mutate
   [L]
-  nil
-  ;; from Sims' Siggraph paper:
-  ;;* Any node can mutate into a new random expression. This allows
-  ;;for large changes, and usually results in a fairly significant
-  ;;alteration of the phenotype.
-  ;;* If the node is a scalar value, it can be adjusted by the
-  ;;addition of some random amount.
-  ;;* If the node is a vector, it can be adjusted by adding random
-  ;;amounts to each element.
-  ;;* If the node is a function, it can mutate into a different
-  ;;function. For example (abs X) might become (cos X). If this
-  ;;mutation occurs, the arguments of the function are also adjusted
-  ;;if necessary to the correct number and types.
-  ;;* An expression can become the argument to a new random
-  ;;function. Other arguments are generated at random if
-  ;;necessary. For example X might become (* X .3).
-  ;;* An argument to a function can jump out and become the new value
-  ;;for that node. For example (* X .3) might become X. This is the
-  ;;inverse of the previous type of mutation.
-  ;;* Finally, a node can become a copy of another node from the
-  ;;parent expression. For example (+ (abs X) (* Y .6)) might
-  ;;become (+ (abs (* Y .6)) (* Y .6)). This causes effects similar to
-  ;;those caused by mating an expression with itself. It allows for
-  ;;sub-expressions to duplicate themselves within the overall
-  ;;expression.
-)
+  (let [loc1      (rand-nth (locs L))
+        loc2      (rand-nth (locs-ex-fns L))
+        loc3      (rand-nth (locs-ex-fns L))
+        new-node  (mutate-node (zip/node loc1))
+        ;;_ (println "newnode" new-node)
+        ]
+    (if (nil? new-node)
+      (replace-loc loc2 loc3)
+      (replace-loc-with-node loc1 new-node))))
+;;(mutate '(v+ 1.0 (v* pos [2.0 3.0])))
 
 (defn- good-random-code?
   "does it have at least one paren?"
@@ -318,14 +371,36 @@
     statuses))
 
 (defn- get-random-child
-  "get a good image-creation code created via breeding two other codes"
+  "get a good image-creation code created via breeding two other
+  codes"
   [code0 code1]
   (get-good-code* (fn [] (breed code0 code1))))
 
 (defn- make-random-child-and-png
-  "take 2 codes, breed them and save as files. return the code, clj-filename and png-filename"
+  "take 2 codes, breed them and save as files. return the code,
+  clj-filename and png-filename"
   [code0 code1 timestamp suffix]
   (let [my-code (get-random-child code0 code1)]
+    (if (nil? my-code)
+      [nil nil nil]
+      (let [png-filename (get-png-filename timestamp suffix)
+            my-image (image (eval my-code) :size full-size)
+            clj-filename (get-clj-filename timestamp suffix)
+            clj-basename (get-clj-basename timestamp suffix)]
+        (write-png png-filename my-image)
+        (spit clj-filename (str my-code))
+        [my-code clj-basename png-filename]))))
+
+(defn- get-random-mutant
+  "get a good image-creation code created via mutating a code"
+  [code]
+  (get-good-code* (fn [] (mutate code))))
+
+(defn- make-random-mutant-and-png
+  "take a code, mutate it and save as files. return the code,
+  clj-filename and png-filename"
+  [code timestamp suffix]
+  (let [my-code (get-random-mutant code)]
     (if (nil? my-code)
       [nil nil nil]
       (let [png-filename (get-png-filename timestamp suffix)
@@ -362,6 +437,19 @@
            (println "!!! suffix" suffix "unable to create image")
            (post-to-web the-code clj-filename png-filename)))))))
 
+(defn post-mutants-to-web
+  "Find the highest-scoring parents, post a batch of 5 codes & images
+  mutated from the top parent to twitter and github"
+  []
+  (let [timestamp-str (get-timestamp-str)
+        [c0 c1] (get-parent-tweet-codes)]
+    (dorun
+     (doseq [suffix "ZYXWV"]
+       (let [[the-code clj-filename png-filename] (make-random-mutant-and-png c0 timestamp-str suffix)]
+         (if (nil? the-code)
+           (println "!!! suffix" suffix "unable to create image")
+           (post-to-web the-code clj-filename png-filename)))))))
+
 
 (comment ;; code below to test things out
   ;; generate & show a random image
@@ -387,6 +475,16 @@
   ;; Careful!
   (post-children-to-web)
 
-  ;; (vfrac (offset (dot (vmod (vfrac (alpha (z (vsqrt (x vsplasma))))) [-9.5645 -4.0767 2.8253]) 2.4199) (lightness-from-rgb snoise)))
+  (def rents (get-parent-tweet-codes))
+  (def dad (first rents))
+  (def dad '(square (vdivide (z [-2.4771 -1.1514 1.2421]) (z (length (red-from-hsl (adjust-hue (gradient (clamp (vpow [0.0922 2.0485 1.7534 0.2346] [-1.7219 1.893]) vplasma -2.9257)) (v* snoise (vmin (min-component [1.6318 2.8916]) (vmod [-1.1498 -2.4865 -2.5974] [-2.7365 0.2105 0.5691 0.8395]))))))))))
+  (show (eval dad))
+  (let [c (get-random-mutant dad)
+        _ (println c)]
+    (if (not (nil? c))
+      (show (eval c))))
+
+  ;; Careful!
+  (post-mutants-to-web)
 
   )
