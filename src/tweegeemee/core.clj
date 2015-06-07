@@ -6,6 +6,7 @@
             [environ.core :refer [env]]
             [clojure.zip :as zip]
             [clojure.set :as set]
+            [clojure.edn :as edn]
             [tentacles.gists :as gists])
   (:import [java.io File]
            [javax.imageio ImageIO]))
@@ -26,7 +27,8 @@
 (def min-color-difference 10) ;; not too similar
 (def test-size 16)
 (def full-size 720)
-(def max-code-depth 6)
+(def max-code-depth 9)
+(def gist-archive-filename "1_archive.edn")
 
 ;; Functions for use in creating imagery.
 (declare random-value)
@@ -54,6 +56,65 @@
 (def prob-term-fn    0.1)  ;; vs terminal values
 (def prob-ternary-fn 0.02) ;; vs. binary or unary
 (def prob-binary-fn  0.3)  ;; vs ternary or unary
+
+;; ======================================================================
+;; gist stuff
+(declare image-hash)
+(defn- write-str-to-gist-archive
+  [data-str]
+  (let [resp (gists/edit-gist
+              my-gist-archive-id
+              {:auth my-gist-auth
+               :files { gist-archive-filename { :content data-str }}})]
+    (if (nil? (:status resp))
+      resp
+      (throw (Exception. (str "gist error" (:message (:body resp))))))))
+
+(defn- read-str-from-gist-archive
+  []
+  (let [resp (gists/specific-gist my-gist-archive-id {:auth my-gist-auth})]
+    (if (nil? (:status resp))
+      (-> (:files resp)
+          ((keyword gist-archive-filename))
+          :content)
+      (throw (Exception. (str "gist error" (:message (:body resp))))))))
+
+(defn- read-gist-archive-data
+  []
+  (-> (read-str-from-gist-archive)
+      (edn/read-string)))
+
+(defn- my-pr-str
+  "take array of maps and output them.  only works for data I expect. :^)"
+  [data]
+  (str "[\n"
+       (reduce (fn [a b]
+                 (format "%s { :name \"%s\" :hash %d :image-hash %d\n   :code %s\n }\n"
+                         a (:name b) (:hash b) (:image-hash b) (:code b)))
+               "" data)
+       "]\n"
+       ))
+;;(my-pr-str '[{:hash 1 :image-hash 1 :code '(+ 1 1)} {:hash 2 :image-hash 2 :code '(+ 2 2)}])
+
+(defn- update-gist-archive-data
+  "add the data to the archive, return the line number for the info"
+  [new-data]
+  (let [old-archive-data (read-gist-archive-data)
+        new-archive-data (conj old-archive-data new-data)
+        line-number      (+ 2 (* 3 (dec (count new-archive-data))))
+        new-archive-str  (my-pr-str new-archive-data)]
+    (write-str-to-gist-archive new-archive-str)
+    line-number))
+
+(defn- append-to-gist
+  [filename code]
+  (update-gist-archive-data
+   {:name       filename
+    :hash       (hash code)
+    :image-hash (image-hash (image (eval code) :size test-size))
+    :code       (str code)
+    }))
+;; (append-to-gist "test6" 0.175)
 
 ;; ======================================================================
 (defn- random-fn
@@ -227,39 +288,60 @@
 (defn- good-image?
   "is the image not a constant color?"
   [img]
-  (let [values (map #(vector
+  (let [W (.getWidth img)
+        H (.getHeight img)
+        values (map #(vector
                       (bit-shift-right (bit-and % 0x00ff0000) 16)
                       (bit-shift-right (bit-and % 0x0000ff00) 8)
                       (bit-shift-right (bit-and % 0x000000ff) 0))
-                    (for [x (range test-size) y (range test-size)]
+                    (for [x (range W) y (range H)]
                       (.getRGB img x y)))]
     (or (good-colors? (map first values))
         (good-colors? (map second values))
         (good-colors? (map third values)))))
 
+(defn- image-hash
+  "hash the colors in an image"
+  [img]
+  (let [W (.getWidth img)
+        H (.getHeight img)]
+    (hash (for [x (range W) y (range H)] (.getRGB img x y)))))
+
+(defn- get-old-hashes
+  []
+  (let [data (read-gist-archive-data)
+        old-hashes (set (map :hash data))
+        old-image-hashes (set (map :image-hash data))]
+    [old-hashes old-image-hashes]))
+;; (get-old-hashes)
+
 (defn- get-good-code*
   "given a code-creator-fn, get some code that creates non-boring images."
   [code-creator-fn]
-  (let [cur-count (atom 0)
+  (let [cur-count  (atom 0)
         good-image (atom false)
-        good-code (atom nil)]
-    (while (and (< @cur-count 100)
+        [old-hashes old-image-hashes] (get-old-hashes)
+        good-code  (atom nil)]
+    (while (and (< @cur-count 200)
                 (not @good-image))
       (swap! cur-count inc)
       (try
         (let [cur-code (code-creator-fn)
               ;;_ (println "\n??" cur-code)
+              _ (when (not (nil? (old-hashes (hash cur-code))))
+                  (throw (Exception. "previously created code")))
               _ (when (not (good-random-code? cur-code))
-                  (throw (Exception. "badly created code"))) ;; cause exception
-              img (image (eval cur-code) :size test-size)]
+                  (throw (Exception. "badly created code")))
+              img (image (eval cur-code) :size test-size)
+              _ (when (not (nil? (old-image-hashes (image-hash img))))
+                  (throw (Exception. "previously created image")))
+              _ (when (not (good-image? img))
+                  (throw (Exception. "boring image")))]
           ;; no exception
-          (if (good-image? img)
-            (do
-              (reset! good-image true)
-              (reset! good-code cur-code))
-            (println @cur-count "boring image")))
+          (reset! good-image true)
+          (reset! good-code cur-code))
         (catch Exception e
-          (println @cur-count "code exception"))
+          (println @cur-count e))
         (catch java.util.concurrent.ExecutionException e
           (println @cur-count "execution exception"))))
     @good-code))
@@ -313,23 +395,23 @@
               (tw-req/status-body-part status-text)]))
     (catch Exception e
       ;; FIXME -- why does this always have a remote-closed exception?
-      (println "caught twitter exception" e)))
-  (println "waiting for a bit...")
+      (println "caught expected? twitter exception" e)))
+  (println "waiting for a 5 seconds...")
   (Thread/sleep 5000))
 
-(defn- append-to-gist
-  [filename content]
-  (gists/edit-gist
-   my-gist-archive-id
-   {:auth my-gist-auth
-    :files { filename { :content content }}}))
-;; (append-to-gist "TEST.txt" "another test 1")
+
+(defn sanitize-url
+  [url]
+  (clojure.string/replace url "." "-"))
 
 (defn- post-to-web
   [the-code clj-filename png-filename]
-  (let [status-text (str clj-filename " https://gist.githubusercontent.com/rogerallen/"
-                         my-gist-archive-id "/raw/" clj-filename)]
-  (append-to-gist clj-filename (str the-code))
+  (let [gist-line-number (append-to-gist clj-filename the-code)
+        gist-url         (str "https://gist.github.com/rogerallen/"
+                              my-gist-archive-id
+                              "#file-" (sanitize-url gist-archive-filename)
+                              "-L" gist-line-number "-L" (+ 2 gist-line-number))
+        status-text (str clj-filename " " gist-url " #ProceduralArt")]
   (post-to-twitter status-text png-filename)))
 
 (defn- score-status
@@ -350,24 +432,25 @@
 (defn- get-parent-tweet-codes
   "return a sequence of the highest-scoring two tweets code"
   []
-  (let [archive  (gists/specific-gist my-gist-archive-id)
+  (let [archive  (read-gist-archive-data)
         statuses (->> (:body (tw/statuses-user-timeline
                               :oauth-creds my-creds
-                              :params {:count 12
+                              :params {:count 30
                                        :screen-name my-screen-name}))
                       (map #(assoc % :text
                                    (clojure.string/replace (:text %) #" http.*" "")))
-                      (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w.clj" (:text %)))
+                      (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
                       (map #(assoc % :score (score-status %)))
                       (sort-by :score)
                       (reverse)
                       (take 2)
                       (map :text)
-                      (map #(-> (:files archive)
-                                ((keyword %))
-                                :content))
+                      (mapcat #(filter (fn [x] (= (:name x) %)) archive))
+                      (map :code)
+                      (map str)
                       (filter sanity-check-code)
-                      (map read-string))]
+                      (map read-string)
+                      )]
     statuses))
 
 (defn- get-random-child
@@ -456,6 +539,11 @@
   (let [c (get-random-code)
         _ (println c)]
     (show (eval c)))
+
+  ;; post an image to the web (careful!)
+  (let [[the-code clj-filename png-filename]
+        (make-random-code-and-png (get-timestamp-str) "s")]
+    (post-to-web the-code clj-filename png-filename))
 
   ;; Careful!
   (post-random-batch-to-web)

@@ -15,15 +15,15 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
  * [x] save image as file
 * [x] post images
  * [x] 140 characters is too constraining--use gists for code
- * [ ] too many files in a gist makes it unreadable.  Use 1 file & append?
- * [ ] too many repeats.  need to hash the creation string & small image & check for dupes
+ * [x] too many files in a gist makes it unreadable.  Use 1 file & append?
+ * [x] too many repeats.  need to hash the creation string & small image & check for dupes
 * [x] read twitter favorites & retweets
 * [x] breed new images
 * [x] fill out all the missing functions.
  * [x] limiting to fewer levels is helping perf
  * [ ] constrain the creation process to select and use only a few functions.  More choices are not making better images.
 * [x] add mutation, too.
-* [ ] show that we can create interesting children & mutants
+* [x] show that we can create interesting children & mutants
 * [ ] hook up to heroku
 * [ ] profit! (ha)
 
