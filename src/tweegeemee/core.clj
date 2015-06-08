@@ -1,13 +1,15 @@
 (ns tweegeemee.core
   (:use [clisk live])
   (:require [twitter.api.restful :as tw]
-            [twitter.oauth :as tw-oauth]
-            [twitter.request :as tw-req]
-            [environ.core :refer [env]]
-            [clojure.zip :as zip]
-            [clojure.set :as set]
-            [clojure.edn :as edn]
-            [tentacles.gists :as gists])
+            [twitter.oauth       :as tw-oauth]
+            [twitter.request     :as tw-req]
+            [environ.core        :refer [env]]
+            [clojure.zip         :as zip]
+            [clojure.set         :as set]
+            [clojure.edn         :as edn]
+            [tentacles.gists     :as gists]
+            [cronj.core          :as cj]
+            )
   (:import [java.io File]
            [javax.imageio ImageIO]))
 
@@ -27,7 +29,7 @@
 (def min-color-difference 10) ;; not too similar
 (def test-size 16)
 (def full-size 720)
-(def max-code-depth 9)
+(def max-code-depth 10)
 (def gist-archive-filename "1_archive.edn")
 
 ;; Functions for use in creating imagery.
@@ -404,16 +406,6 @@
   [url]
   (clojure.string/replace url "." "-"))
 
-(defn- post-to-web
-  [the-code clj-filename png-filename]
-  (let [gist-line-number (append-to-gist clj-filename the-code)
-        gist-url         (str "https://gist.github.com/rogerallen/"
-                              my-gist-archive-id
-                              "#file-" (sanitize-url gist-archive-filename)
-                              "-L" gist-line-number "-L" (+ 2 gist-line-number))
-        status-text (str clj-filename " " gist-url " #ProceduralArt")]
-  (post-to-twitter status-text png-filename)))
-
 (defn- score-status
   "retweets count more than favorites"
   [status]
@@ -498,23 +490,37 @@
 ;; Public API ===========================================================
 ;; ======================================================================
 
+(defn post-to-web
+  "Post the-code + clj-filename info to gist.github.com, post
+  png-filename & a pointer to twitter."
+  [the-code clj-filename png-filename]
+  (let [gist-line-number (append-to-gist clj-filename the-code)
+        gist-url         (str "https://gist.github.com/rogerallen/"
+                              my-gist-archive-id
+                              "#file-" (sanitize-url gist-archive-filename)
+                              "-L" gist-line-number "-L" (+ 2 gist-line-number))
+        status-text (str clj-filename " " gist-url " #ProceduralArt")]
+  (post-to-twitter status-text png-filename)))
+
 (defn post-random-batch-to-web
-  "Post a batch of 5 random codes & images to twitter and github."
-  []
+  "Post a batch of random codes & images to twitter and github."
+  [suffix-str]
   (let [timestamp-str (get-timestamp-str)]
     (dorun
-     (doseq [suffix "abcde"]
-       (let [[the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)]
-         (post-to-web the-code clj-filename png-filename))))))
+     (doseq [suffix suffix-str]
+       (let [[the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)
+             _ (println "posting:" the-code)]
+         (post-to-web the-code clj-filename png-filename))))
+    (println "done.")))
 
 (defn post-children-to-web
   "Find the highest-scoring parents, post a batch of 5 codes & images
   bred from those parents to twitter and github"
-  []
+  [suffix-str]
   (let [timestamp-str (get-timestamp-str)
         [c0 c1] (get-parent-tweet-codes)]
     (dorun
-     (doseq [suffix "ABCDE"]
+     (doseq [suffix suffix-str]
        (let [[the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
          (if (nil? the-code)
            (println "!!! suffix" suffix "unable to create image")
@@ -523,17 +529,43 @@
 (defn post-mutants-to-web
   "Find the highest-scoring parents, post a batch of 5 codes & images
   mutated from the top parent to twitter and github"
-  []
+  [suffix-str]
   (let [timestamp-str (get-timestamp-str)
         [c0 c1] (get-parent-tweet-codes)]
     (dorun
-     (doseq [suffix "ZYXWV"]
+     (doseq [suffix suffix-str]
        (let [[the-code clj-filename png-filename] (make-random-mutant-and-png c0 timestamp-str suffix)]
          (if (nil? the-code)
            (println "!!! suffix" suffix "unable to create image")
            (post-to-web the-code clj-filename png-filename)))))))
 
+(defn post-a-set-to-web
+  []
+  (println "======================================================================")
+  (println "posting a set...")
+  (post-random-batch-to-web "a")
+  (post-children-to-web "C")
+  (post-mutants-to-web "M")
+  (println "posting complete."))
 
+(defn gen-handler [t opts]
+  (println (:output opts) ": " t)
+  (use 'clisk.live) ;; for some reason lein run needs this, lein repl doesn't
+  (post-a-set-to-web))
+
+(def cur-cronj
+  (cj/cronj :entries [{:id "gen-task"
+                       :handler gen-handler
+                       :schedule "0 32 /4 * * * *" ;; every 4 hours
+                       :opts {:output "post-a-set-to-web"}}]))
+
+(defn -main [& args]
+  (println "Started")
+  (cj/start! cur-cronj)
+  )
+
+;; ======================================================================
+;; ======================================================================
 (comment ;; code below to test things out
   ;; generate & show a random image
   (let [c (get-random-code)
@@ -546,7 +578,7 @@
     (post-to-web the-code clj-filename png-filename))
 
   ;; Careful!
-  (post-random-batch-to-web)
+  (post-random-batch-to-web "abcde")
 
   ;; breed things by hand...
   (def rents (get-parent-tweet-codes))
@@ -561,7 +593,7 @@
       (show (eval c))))
 
   ;; Careful!
-  (post-children-to-web)
+  (post-children-to-web "ABCDE")
 
   (def rents (get-parent-tweet-codes))
   (def dad (first rents))
@@ -573,6 +605,6 @@
       (show (eval c))))
 
   ;; Careful!
-  (post-mutants-to-web)
+  (post-mutants-to-web "VWXYZ")
 
   )

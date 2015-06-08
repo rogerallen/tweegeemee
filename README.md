@@ -21,9 +21,10 @@ So far, I'm using https://howistart.org/posts/clojure/1, http://www.karlsims.com
 * [x] breed new images
 * [x] fill out all the missing functions.
  * [x] limiting to fewer levels is helping perf
- * [ ] constrain the creation process to select and use only a few functions.  More choices are not making better images.
+ * [ ] constrain to select and use only a few functions.  More choices are not making better images.
 * [x] add mutation, too.
 * [x] show that we can create interesting children & mutants
+* [x] get at-at or cronj to work
 * [ ] hook up to heroku
 * [ ] profit! (ha)
 
