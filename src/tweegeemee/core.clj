@@ -556,7 +556,8 @@
 (def cur-cronj
   (cj/cronj :entries [{:id "gen-task"
                        :handler gen-handler
-                       :schedule "0 32 /4 * * * *" ;; every 4 hours
+                       ;;:schedule "0 32 /4 * * * *" ;; every 4 hours
+                       :schedule "0 /5 * * * * *" ;; every 5 mins for testing
                        :opts {:output "post-a-set-to-web"}}]))
 
 (defn -main [& args]
