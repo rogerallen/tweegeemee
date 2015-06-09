@@ -11,7 +11,8 @@
             [cronj.core          :as cj]
             )
   (:import [java.io File]
-           [javax.imageio ImageIO]))
+           [javax.imageio ImageIO])
+  (:gen-class))
 
 ;; ======================================================================
 ;; add these keys to your profiles.clj (AND DON'T CHECK THAT FILE IN!)
@@ -31,6 +32,7 @@
 (def full-size 720)
 (def max-code-depth 10)
 (def gist-archive-filename "1_archive.edn")
+(def num-tweets-for-parent-search 30)
 
 ;; Functions for use in creating imagery.
 (declare random-value)
@@ -38,21 +40,22 @@
 (defn- random-vec2 [] [(random-value) (random-value)])
 (defn- random-vec3 [] [(random-value) (random-value) (random-value)])
 (defn- random-vec4 [] [(random-value) (random-value) (random-value) (random-value)])
-(def term-vals #{'pos random-scalar random-vec2 random-vec3 random-vec4})
-(def term-fns #{'noise 'snoise 'plasma 'splasma
-                'vnoise 'vsnoise 'vplasma 'vsplasma
-                'grain 'turbulence 'vturbulence
-                'spots 'blotches})
-(def unary-fns #{'vsin 'vcos 'vabs 'vround 'vfloor 'vfrac
-                 'square 'vsqrt 'sigmoid 'max-component 'min-component
-                 'length 'normalize 'gradient
-                 'hue-from-rgb 'lightness-from-rgb 'saturation-from-rgb
-                 'hsl-from-rgb 'red-from-hsl 'green-from-hsl 'blue-from-hsl
-                 'rgb-from-hsl 'x 'y 'z 't 'alpha })
-(def binary-fns #{'v+ 'v* 'v- 'vdivide 'vpow 'vmod 'dot 'cross3
-                  'vmin 'vmax 'checker 'scale 'offset
-                  'adjust-hue 'adjust-hsl 'vconcat})
-(def ternary-fns #{'lerp 'clamp})
+;; use ` instead of ' in order to add the namespace so it can be found when eval'd
+(def term-vals #{`pos random-scalar random-vec2 random-vec3 random-vec4})
+(def term-fns #{`noise `snoise `plasma `splasma
+                `vnoise `vsnoise `vplasma `vsplasma
+                `grain `turbulence `vturbulence
+                `spots `blotches})
+(def unary-fns #{`vsin `vcos `vabs `vround `vfloor `vfrac
+                 `square `vsqrt `sigmoid `max-component `min-component
+                 `length `normalize `gradient
+                 `hue-from-rgb `lightness-from-rgb `saturation-from-rgb
+                 `hsl-from-rgb `red-from-hsl `green-from-hsl `blue-from-hsl
+                 `rgb-from-hsl `x `y `z `t `alpha })
+(def binary-fns #{`v+ `v* `v- `vdivide `vpow `vmod `dot `cross3
+                  `vmin `vmax `checker `scale `offset
+                  `adjust-hue `adjust-hsl `vconcat})
+(def ternary-fns #{`lerp `clamp})
 (def fns (set/union unary-fns binary-fns ternary-fns))
 ;; Probabilities
 (def prob-term-fn    0.1)  ;; vs terminal values
@@ -96,7 +99,6 @@
                "" data)
        "]\n"
        ))
-;;(my-pr-str '[{:hash 1 :image-hash 1 :code '(+ 1 1)} {:hash 2 :image-hash 2 :code '(+ 2 2)}])
 
 (defn- update-gist-archive-data
   "add the data to the archive, return the line number for the info"
@@ -377,14 +379,16 @@
 (defn- make-random-code-and-png
   "make random code and save as files. return the code, clj-filename and png-filename"
   [timestamp suffix]
-  (let [my-code (get-random-code)
-        png-filename (get-png-filename timestamp suffix)
-        my-image (image (eval my-code) :size full-size)
-        clj-filename (get-clj-filename timestamp suffix)
-        clj-basename (get-clj-basename timestamp suffix)]
-    (write-png png-filename my-image)
-    (spit clj-filename (str my-code))
-    [my-code clj-basename png-filename]))
+  (let [my-code (get-random-code)]
+    (if (nil? my-code)
+      [nil nil nil]
+      (let [png-filename (get-png-filename timestamp suffix)
+            my-image (image (eval my-code) :size full-size)
+            clj-filename (get-clj-filename timestamp suffix)
+            clj-basename (get-clj-basename timestamp suffix)]
+        (write-png png-filename my-image)
+        (spit clj-filename (str my-code))
+        [my-code clj-basename png-filename]))))
 
 (defn- post-to-twitter
   [status-text the-image-filename]
@@ -427,7 +431,7 @@
   (let [archive  (read-gist-archive-data)
         statuses (->> (:body (tw/statuses-user-timeline
                               :oauth-creds my-creds
-                              :params {:count 30
+                              :params {:count num-tweets-for-parent-search
                                        :screen-name my-screen-name}))
                       (map #(assoc % :text
                                    (clojure.string/replace (:text %) #" http.*" "")))
@@ -435,12 +439,13 @@
                       (map #(assoc % :score (score-status %)))
                       (sort-by :score)
                       (reverse)
-                      (take 2)
                       (map :text)
                       (mapcat #(filter (fn [x] (= (:name x) %)) archive))
                       (map :code)
                       (map str)
                       (filter sanity-check-code)
+                      (take 2)
+                      ;;((fn [x] (println "post-take:" x) x))
                       (map read-string)
                       )]
     statuses))
@@ -561,11 +566,11 @@
                        :opts {:output "post-a-set-to-web"}}]))
 
 (defn -main [& args]
-  (binding [*ns* (the-ns 'tweegeemee.core)]
-    (println "Started")
-    (post-a-set-to-web)
-    ;;(cj/start! cur-cronj)
-    ))
+  ;;(binding [*ns* (the-ns 'tweegeemee.core)]
+  (println "Started")
+  (post-a-set-to-web)
+  ;;(cj/start! cur-cronj)
+  );)
 
 ;; ======================================================================
 ;; ======================================================================
@@ -609,5 +614,9 @@
 
   ;; Careful!
   (post-mutants-to-web "VWXYZ")
+
+  ;; to reproduce the heroku failure, do:
+  ;;   lein with-profile production compile :all
+  ;;   lein trampoline run
 
   )

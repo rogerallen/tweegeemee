@@ -9,8 +9,10 @@
                  [net.mikera/clisk    "0.10.0"]
                  [tentacles           "0.3.0"]
                  [im.chit/cronj       "1.4.3"]]
-  :main         tweegeemee.core
+  :main         ^:skip-aot tweegeemee.core
   :min-lein-version "2.0.0"
   :plugins      [[lein-environ "1.0.0"]]
   :jvm-opts     ^:replace [] ;; Enable full optimizer
+  :target-path  "target/%s"
+  :profiles     {:uberjar {:aot :all}}
   )
