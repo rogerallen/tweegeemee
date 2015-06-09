@@ -16,23 +16,19 @@
 
 ;; ======================================================================
 ;; add these keys to your profiles.clj (AND DON'T CHECK THAT FILE IN!)
-(def my-creds (tw-oauth/make-oauth-creds
-               (env :app-consumer-key)          ;; all from api.twitter.com
-               (env :app-consumer-secret)
-               (env :user-access-token)
-               (env :user-access-secret)))
-(def my-screen-name     (env :screen-name))     ;; twitter screen name
-(def my-gist-auth       (env :gist-auth))       ;; gist username:password
-(def my-gist-archive-id (env :gist-archive-id)) ;; create this archive
+(defonce my-twitter-creds           (atom nil)) ;; oauth from api.twitter.com
+(defonce my-screen-name     (atom nil)) ;; twitter screen name
+(defonce my-gist-auth       (atom nil)) ;; gist username:password
+(defonce my-gist-archive-id (atom nil)) ;; create this archive
 
 ;; ======================================================================
-(def min-color-value 32)      ;; not too dark
-(def min-color-difference 10) ;; not too similar
-(def test-size 16)
-(def full-size 720)
-(def max-code-depth 10)
-(def gist-archive-filename "1_archive.edn")
-(def num-tweets-for-parent-search 30)
+(defonce min-color-value              32) ;; not too dark
+(defonce min-color-difference         10) ;; not too similar
+(defonce test-size                    16)
+(defonce full-size                    720)
+(defonce max-code-depth               10)
+(defonce gist-archive-filename        "1_archive.edn")
+(defonce num-tweets-for-parent-search 30)
 
 ;; Functions for use in creating imagery.
 (declare random-value)
@@ -68,8 +64,8 @@
 (defn- write-str-to-gist-archive
   [data-str]
   (let [resp (gists/edit-gist
-              my-gist-archive-id
-              {:auth my-gist-auth
+              @my-gist-archive-id
+              {:auth @my-gist-auth
                :files { gist-archive-filename { :content data-str }}})]
     (if (nil? (:status resp))
       resp
@@ -77,7 +73,7 @@
 
 (defn- read-str-from-gist-archive
   []
-  (let [resp (gists/specific-gist my-gist-archive-id {:auth my-gist-auth})]
+  (let [resp (gists/specific-gist @my-gist-archive-id {:auth @my-gist-auth})]
     (if (nil? (:status resp))
       (-> (:files resp)
           ((keyword gist-archive-filename))
@@ -396,7 +392,7 @@
     (if false
       (println "NOT posting to twitter" status-text)
       (tw/statuses-update-with-media
-       :oauth-creds my-creds
+       :oauth-creds @my-twitter-creds
        :body [(tw-req/file-body-part the-image-filename)
               (tw-req/status-body-part status-text)]))
     (catch Exception e
@@ -430,9 +426,9 @@
   []
   (let [archive  (read-gist-archive-data)
         statuses (->> (:body (tw/statuses-user-timeline
-                              :oauth-creds my-creds
+                              :oauth-creds @my-twitter-creds
                               :params {:count num-tweets-for-parent-search
-                                       :screen-name my-screen-name}))
+                                       :screen-name @my-screen-name}))
                       (map #(assoc % :text
                                    (clojure.string/replace (:text %) #" http.*" "")))
                       (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
@@ -501,7 +497,7 @@
   [the-code clj-filename png-filename]
   (let [gist-line-number (append-to-gist clj-filename the-code)
         gist-url         (str "https://gist.github.com/rogerallen/"
-                              my-gist-archive-id
+                              @my-gist-archive-id
                               "#file-" (sanitize-url gist-archive-filename)
                               "-L" gist-line-number "-L" (+ 2 gist-line-number))
         status-text (str clj-filename " " gist-url " #ProceduralArt")]
@@ -565,9 +561,22 @@
                        :schedule "0 /7 * * * * *" ;; every 5 mins for testing
                        :opts {:output "post-a-set-to-web"}}]))
 
+(defn setup-env!
+  "setup environment vars"
+  []
+  (reset! my-twitter-creds   (tw-oauth/make-oauth-creds
+                              (env :app-consumer-key)
+                              (env :app-consumer-secret)
+                              (env :user-access-token)
+                              (env :user-access-secret)))
+  (reset! my-screen-name     (env :screen-name))
+  (reset! my-gist-auth       (env :gist-auth))
+  (reset! my-gist-archive-id (env :gist-archive-id)))
+
 (defn -main [& args]
   ;;(binding [*ns* (the-ns 'tweegeemee.core)]
   (println "Started")
+  (setup-env!)
   (post-a-set-to-web)
   ;;(cj/start! cur-cronj)
   );)
