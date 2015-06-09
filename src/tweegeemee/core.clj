@@ -564,6 +564,14 @@
 (defn setup-env!
   "setup environment vars"
   []
+  (println "ack:" (subs (env :app-consumer-key) 0 5))
+  (println "acs:" (subs (env :app-consumer-secret) 0 5))
+  (println "uat:" (subs (env :user-access-token) 0 5))
+  (println "uas:" (subs (env :user-access-secret) 0 5))
+  (println "scn:" (subs (env :screen-name) 0 5))
+  (println "gia:" (subs (env :gist-auth) 0 5))
+  (println "gai:" (subs (env :gist-archive-id) 0 5))
+
   (reset! my-twitter-creds   (tw-oauth/make-oauth-creds
                               (env :app-consumer-key)
                               (env :app-consumer-secret)
