@@ -508,9 +508,10 @@
   (let [timestamp-str (get-timestamp-str)]
     (dorun
      (doseq [suffix suffix-str]
-       (let [[the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)
-             _ (println "posting:" the-code)]
-         (post-to-web the-code clj-filename png-filename))))
+       (let [[the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)]
+         (if (nil? the-code)
+           (println "!!! suffix" suffix "unable to create random image")
+           (post-to-web the-code clj-filename png-filename)))))
     (println "done.")))
 
 (defn post-children-to-web
@@ -523,7 +524,7 @@
      (doseq [suffix suffix-str]
        (let [[the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
          (if (nil? the-code)
-           (println "!!! suffix" suffix "unable to create image")
+           (println "!!! suffix" suffix "unable to create child image")
            (post-to-web the-code clj-filename png-filename)))))))
 
 (defn post-mutants-to-web
@@ -536,7 +537,7 @@
      (doseq [suffix suffix-str]
        (let [[the-code clj-filename png-filename] (make-random-mutant-and-png c0 timestamp-str suffix)]
          (if (nil? the-code)
-           (println "!!! suffix" suffix "unable to create image")
+           (println "!!! suffix" suffix "unable to create mutant image")
            (post-to-web the-code clj-filename png-filename)))))))
 
 (defn post-a-set-to-web
@@ -550,20 +551,21 @@
 
 (defn gen-handler [t opts]
   (println (:output opts) ": " t)
-  (use 'clisk.live) ;; for some reason lein run needs this, lein repl doesn't
   (post-a-set-to-web))
 
 (def cur-cronj
   (cj/cronj :entries [{:id "gen-task"
                        :handler gen-handler
                        ;;:schedule "0 32 /4 * * * *" ;; every 4 hours
-                       :schedule "0 /5 * * * * *" ;; every 5 mins for testing
+                       :schedule "0 /7 * * * * *" ;; every 5 mins for testing
                        :opts {:output "post-a-set-to-web"}}]))
 
 (defn -main [& args]
-  (println "Started")
-  (cj/start! cur-cronj)
-  )
+  (binding [*ns* (the-ns 'tweegeemee.core)]
+    (println "Started")
+    (post-a-set-to-web)
+    ;;(cj/start! cur-cronj)
+    ))
 
 ;; ======================================================================
 ;; ======================================================================
