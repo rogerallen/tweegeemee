@@ -341,7 +341,7 @@
           (reset! good-image true)
           (reset! good-code cur-code))
         (catch Exception e
-          (println @cur-count e))
+          (println @cur-count "Exception" (.getMessage e)))
         (catch java.util.concurrent.ExecutionException e
           (println @cur-count "execution exception"))))
     @good-code))
@@ -397,7 +397,7 @@
               (tw-req/status-body-part status-text)]))
     (catch Exception e
       ;; FIXME -- why does this always have a remote-closed exception?
-      (println "caught expected? twitter exception" e)))
+      (println "caught expected? twitter exception" (.getMessage e))))
   (println "waiting for a 5 seconds...")
   (Thread/sleep 5000))
 
