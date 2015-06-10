@@ -545,7 +545,7 @@
   []
   (println "======================================================================")
   (println "posting a set...")
-  (post-random-batch-to-web "a")
+  (post-random-batch-to-web "abc")
   (post-children-to-web "C")
   (post-mutants-to-web "M")
   (println "posting complete."))
