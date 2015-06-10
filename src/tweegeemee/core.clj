@@ -585,11 +585,7 @@
 (defn -main [& args]
   (println "Started")
   (setup-env!)
-  (try (tw/statuses-update
-        :oauth-creds @my-twitter-creds
-        :params {:status "testing from heroku"})
-       (catch Exception e (println "Oh no! " (.getMessage e))))
-  ;;(post-a-set-to-web)
+  (post-a-set-to-web)
   ;;(cj/start! cur-cronj)
   )
 
@@ -645,8 +641,8 @@
 
 
   (try (tw/statuses-update
-        :oauth-creds my-twitter-creds
-        :params {:status "testing from heroku"})
+        :oauth-creds @my-twitter-creds
+        :params {:status "testing from home"})
        (catch Exception e (println "Oh no! " (.getMessage e))))
 
   )
