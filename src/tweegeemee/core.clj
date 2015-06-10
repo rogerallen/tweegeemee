@@ -558,7 +558,8 @@
   (cj/cronj :entries [{:id "gen-task"
                        :handler gen-handler
                        ;;:schedule "0 32 /4 * * * *" ;; every 4 hours
-                       :schedule "0 /7 * * * * *" ;; every 5 mins for testing
+                       :schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
+                       ;;:schedule "0 /7 * * * * *" ;; every 5 mins for testing
                        :opts {:output "post-a-set-to-web"}}]))
 
 (defn setup-env!
@@ -585,8 +586,8 @@
 (defn -main [& args]
   (println "Started")
   (setup-env!)
-  (post-a-set-to-web)
-  ;;(cj/start! cur-cronj)
+  ;;(post-a-set-to-web)
+  (cj/start! cur-cronj)
   )
 
 ;; ======================================================================
