@@ -583,12 +583,15 @@
   (reset! my-gist-archive-id (env :gist-archive-id)))
 
 (defn -main [& args]
-  ;;(binding [*ns* (the-ns 'tweegeemee.core)]
   (println "Started")
   (setup-env!)
-  (post-a-set-to-web)
+  (try (twitter/statuses-update
+        :oauth-creds my-twitter-creds
+        :params {:status "testing from heroku"})
+       (catch Exception e (println "Oh no! " (.getMessage e))))
+  ;;(post-a-set-to-web)
   ;;(cj/start! cur-cronj)
-  );)
+  )
 
 ;; ======================================================================
 ;; ======================================================================
@@ -639,5 +642,11 @@
   ;; to reproduce the heroku failure, do:
   ;;   lein with-profile production compile :all
   ;;   lein trampoline run
+
+
+  (try (twitter/statuses-update
+        :oauth-creds my-twitter-creds
+        :params {:status "testing from heroku"})
+       (catch Exception e (println "Oh no! " (.getMessage e))))
 
   )
