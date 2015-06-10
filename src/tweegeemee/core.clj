@@ -585,8 +585,8 @@
 (defn -main [& args]
   (println "Started")
   (setup-env!)
-  (try (twitter/statuses-update
-        :oauth-creds my-twitter-creds
+  (try (tw/statuses-update
+        :oauth-creds @my-twitter-creds
         :params {:status "testing from heroku"})
        (catch Exception e (println "Oh no! " (.getMessage e))))
   ;;(post-a-set-to-web)
@@ -644,7 +644,7 @@
   ;;   lein trampoline run
 
 
-  (try (twitter/statuses-update
+  (try (tw/statuses-update
         :oauth-creds my-twitter-creds
         :params {:status "testing from heroku"})
        (catch Exception e (println "Oh no! " (.getMessage e))))
