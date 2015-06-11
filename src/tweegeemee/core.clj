@@ -7,28 +7,41 @@
             [clojure.zip         :as zip]
             [clojure.set         :as set]
             [clojure.edn         :as edn]
+            [clojure.java.io     :as io]
             [tentacles.gists     :as gists]
-            [cronj.core          :as cj]
-            )
+            [cronj.core          :as cj])
   (:import [java.io File]
            [javax.imageio ImageIO])
   (:gen-class))
 
 ;; ======================================================================
 ;; add these keys to your profiles.clj (AND DON'T CHECK THAT FILE IN!)
-(defonce my-twitter-creds           (atom nil)) ;; oauth from api.twitter.com
+(defonce my-twitter-creds   (atom nil)) ;; oauth from api.twitter.com
 (defonce my-screen-name     (atom nil)) ;; twitter screen name
 (defonce my-gist-auth       (atom nil)) ;; gist username:password
 (defonce my-gist-archive-id (atom nil)) ;; create this archive
+(defn setup-env!
+  "setup environment vars"
+  []
+  (reset! my-twitter-creds   (tw-oauth/make-oauth-creds
+                              (env :app-consumer-key)
+                              (env :app-consumer-secret)
+                              (env :user-access-token)
+                              (env :user-access-secret)))
+  (reset! my-screen-name     (env :screen-name))
+  (reset! my-gist-auth       (env :gist-auth))
+  (reset! my-gist-archive-id (env :gist-archive-id))
+  nil)
 
 ;; ======================================================================
-(defonce min-color-value              32) ;; not too dark
+(defonce min-color-value              36) ;; not too dark
 (defonce min-color-difference         10) ;; not too similar
 (defonce test-size                    16)
 (defonce full-size                    720)
 (defonce max-code-depth               10)
 (defonce gist-archive-filename        "1_archive.edn")
-(defonce num-tweets-for-parent-search 30)
+(defonce num-tweets-for-parent-search 60)
+(defonce num-parents-to-breed         5)
 
 ;; Functions for use in creating imagery.
 (declare random-value)
@@ -338,12 +351,17 @@
               _ (when (not (good-image? img))
                   (throw (Exception. "boring image")))]
           ;; no exception
+          (println "\n" @cur-count "got:" cur-code)
           (reset! good-image true)
           (reset! good-code cur-code))
         (catch Exception e
-          (println @cur-count "Exception" (.getMessage e)))
+          ;;(println @cur-count "Exception" (.getMessage e))
+          (print "e")
+          )
         (catch java.util.concurrent.ExecutionException e
-          (println @cur-count "execution exception"))))
+          ;;(println @cur-count "execution exception")
+          (print "E")
+          )))
     @good-code))
 
 (defn- get-random-code
@@ -359,6 +377,15 @@
 (defn- get-timestamp-str
   []
   (.format (java.text.SimpleDateFormat. "yyMMdd_HHmmss") (System/currentTimeMillis)))
+
+(defn- get-our-file-seq
+  []
+  (filter #(re-matches #".*\.clj|.*\.png" (.getName %)) (file-seq (io/file "images"))))
+;; (nth (get-our-file-seq) 5)
+
+(defn- cleanup-our-files!
+  []
+  (dorun (map #(io/delete-file %) (get-our-file-seq))))
 
 (defn- get-png-filename
   [timestamp suffix]
@@ -422,8 +449,8 @@
     (set/subset? code-fn-set fns)))
 
 (defn- get-parent-tweet-codes
-  "return a sequence of the highest-scoring two tweets code"
-  []
+  "return a sequence of the N highest-scoring two tweets code"
+  [N]
   (let [archive  (read-gist-archive-data)
         statuses (->> (:body (tw/statuses-user-timeline
                               :oauth-creds @my-twitter-creds
@@ -440,7 +467,7 @@
                       (map :code)
                       (map str)
                       (filter sanity-check-code)
-                      (take 2)
+                      (take N)
                       ;;((fn [x] (println "post-take:" x) x))
                       (map read-string)
                       )]
@@ -516,11 +543,13 @@
     (println "done.")))
 
 (defn post-children-to-web
-  "Find the highest-scoring parents, post a batch of 5 codes & images
+  "Find the highest-scoring parents, post a batch of codes & images
   bred from those parents to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        [c0 c1] (get-parent-tweet-codes)]
+        rents         (get-parent-tweet-codes num-parents-to-breed)
+        c0            (rand-nth rents)
+        c1            (rand-nth rents)]
     (dorun
      (doseq [suffix suffix-str]
        (let [[the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
@@ -533,7 +562,9 @@
   mutated from the top parent to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        [c0 c1] (get-parent-tweet-codes)]
+        rents         (get-parent-tweet-codes num-parents-to-breed)
+        c0            (rand-nth rents)
+        c1            (rand-nth rents)]
     (dorun
      (doseq [suffix suffix-str]
        (let [[the-code clj-filename png-filename] (make-random-mutant-and-png c0 timestamp-str suffix)]
@@ -548,6 +579,7 @@
   (post-random-batch-to-web "abc")
   (post-children-to-web "C")
   (post-mutants-to-web "M")
+  (cleanup-our-files!)
   (println "posting complete."))
 
 (defn gen-handler [t opts]
@@ -562,33 +594,10 @@
                        ;;:schedule "0 /7 * * * * *" ;; every 5 mins for testing
                        :opts {:output "post-a-set-to-web"}}]))
 
-(defn setup-env!
-  "setup environment vars"
-  []
-  (comment
-    (println "ack:" (subs (env :app-consumer-key) 0 5))
-    (println "acs:" (subs (env :app-consumer-secret) 0 5))
-    (println "uat:" (subs (env :user-access-token) 0 5))
-    (println "uas:" (subs (env :user-access-secret) 0 5))
-    (println "scn:" (subs (env :screen-name) 0 5))
-    (println "gia:" (subs (env :gist-auth) 0 5))
-    (println "gai:" (subs (env :gist-archive-id) 0 5)))
-
-  (reset! my-twitter-creds   (tw-oauth/make-oauth-creds
-                              (env :app-consumer-key)
-                              (env :app-consumer-secret)
-                              (env :user-access-token)
-                              (env :user-access-secret)))
-  (reset! my-screen-name     (env :screen-name))
-  (reset! my-gist-auth       (env :gist-auth))
-  (reset! my-gist-archive-id (env :gist-archive-id)))
-
 (defn -main [& args]
   (println "Started")
   (setup-env!)
-  ;;(post-a-set-to-web)
-  (cj/start! cur-cronj)
-  )
+  (cj/start! cur-cronj))
 
 ;; ======================================================================
 ;; ======================================================================
@@ -597,8 +606,7 @@
   (setup-env!)
 
   ;; generate & show a random image
-  (let [c (get-random-code)
-        _ (println c)]
+  (let [c (get-random-code)]
     (show (eval c)))
 
   ;; post an image to the web (careful!)
@@ -607,13 +615,13 @@
     (post-to-web the-code clj-filename png-filename))
 
   ;; Careful!
-  (post-random-batch-to-web "abcde")
+  (post-random-batch-to-web "r")
 
   ;; breed things by hand...
-  (def rents (get-parent-tweet-codes))
-  (def dad (first rents))
-  (def mom (second rents))
-  (def mom '(vfrac (offset (dot (vmod (vfrac (alpha (z (vsqrt (x vsplasma))))) [-9.5645 -4.0767 2.8253]) 2.4199) (lightness-from-rgb snoise))))
+  (def rents (get-parent-tweet-codes 5))
+  (show (eval (nth rents 0)))
+  (def dad (rand-nth rents))
+  (def mom (rand-nth rents))
   (show (eval dad))
   (show (eval mom))
   (let [c (get-random-child dad mom)
@@ -624,9 +632,8 @@
   ;; Careful!
   (post-children-to-web "ABCDE")
 
-  (def rents (get-parent-tweet-codes))
-  (def dad (first rents))
-  (def dad '(square (vdivide (z [-2.4771 -1.1514 1.2421]) (z (length (red-from-hsl (adjust-hue (gradient (clamp (vpow [0.0922 2.0485 1.7534 0.2346] [-1.7219 1.893]) vplasma -2.9257)) (v* snoise (vmin (min-component [1.6318 2.8916]) (vmod [-1.1498 -2.4865 -2.5974] [-2.7365 0.2105 0.5691 0.8395]))))))))))
+  (def rents (get-parent-tweet-codes 5))
+  (def dad (rand-nth rents))
   (show (eval dad))
   (let [c (get-random-mutant dad)
         _ (println c)]

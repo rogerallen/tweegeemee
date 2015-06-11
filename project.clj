@@ -1,4 +1,4 @@
-(defproject tweegeemee "1.0.0"
+(defproject tweegeemee "1.1.0"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
@@ -12,7 +12,7 @@
   :main         ^:skip-aot tweegeemee.core
   :min-lein-version "2.0.0"
   :plugins      [[lein-environ "1.0.0"]]
-  :jvm-opts     ^:replace [] ;; Enable full optimizer
+  :jvm-opts     ^:replace ["-Xms128m" "-Xmx512m" "-Xss512k"] ;; Enable full optimizer
   :target-path  "target/%s"
   :profiles     {:uberjar {:aot :all}}
   )
