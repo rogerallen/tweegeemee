@@ -40,7 +40,7 @@
 (defonce full-size                    720)
 (defonce max-code-depth               10)
 (defonce gist-archive-filename        "1_archive.edn")
-(defonce num-tweets-for-parent-search 60)
+(defonce num-tweets-for-parent-search 60) ;; 24 hrs/ every 3 = 8x * 6 imgs = 48
 (defonce num-parents-to-breed         5)
 
 ;; Functions for use in creating imagery.
@@ -530,6 +530,8 @@
         status-text (str clj-filename " " gist-url " #ProceduralArt")]
   (post-to-twitter status-text png-filename)))
 
+;; FIXME - post-XXX-to-web routines below have a lot in common...
+
 (defn post-random-batch-to-web
   "Post a batch of random codes & images to twitter and github."
   [suffix-str]
@@ -575,10 +577,10 @@
 (defn post-a-set-to-web
   []
   (println "======================================================================")
-  (println "posting a set...")
-  (post-random-batch-to-web "abc")
-  (post-children-to-web "C")
-  (post-mutants-to-web "M")
+  (println "posting a set of 6: random ab, children CD, mutant MN")
+  (post-random-batch-to-web "ab")
+  (post-children-to-web "CD")
+  (post-mutants-to-web "MN")
   (cleanup-our-files!)
   (println "posting complete."))
 
@@ -589,13 +591,13 @@
 (def cur-cronj
   (cj/cronj :entries [{:id "gen-task"
                        :handler gen-handler
-                       ;;:schedule "0 32 /4 * * * *" ;; every 4 hours
-                       :schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
-                       ;;:schedule "0 /7 * * * * *" ;; every 5 mins for testing
-                       :opts {:output "post-a-set-to-web"}}]))
+                       :schedule "0 13 /3 * * * *"   ;; every 3 hours at 13 past
+                       ;;:schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
+                       ;;:schedule "0 /5 * * * * *"  ;; every 5 mins for testing
+                       :opts {:output "posting every 3 hours"}}]))
 
 (defn -main [& args]
-  (println "Started")
+  (println "Started version" (env :tweegeemee-version))
   (setup-env!)
   (cj/start! cur-cronj))
 
@@ -603,6 +605,7 @@
 ;; ======================================================================
 (comment ;; code below to test things out
 
+  (env :tweegeemee-version)
   (setup-env!)
 
   ;; generate & show a random image
@@ -646,7 +649,6 @@
   ;; to reproduce the heroku failure, do:
   ;;   lein with-profile production compile :all
   ;;   lein trampoline run
-
 
   (try (tw/statuses-update
         :oauth-creds @my-twitter-creds
