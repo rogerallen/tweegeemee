@@ -7,7 +7,7 @@ See https://twitter.com/tweegeemee/media for the latest images.
 Each tweet has a name based on the timestamp of creation with a suffix
 at the end, a link to a github gist and a hashtag (currently #ProceduralArt).
 
-The link to a github gist highlight the code used to create the image.
+The link to a github gist highlights the code used to create the image.
 
 Follow, Favorite and Retweet [tweegeemee](https://twitter.com/tweegeemee)
 images to select them for future generations.
