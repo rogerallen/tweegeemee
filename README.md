@@ -4,6 +4,11 @@ A Clojure library designed to breed images via twitter.  Now running on Heroku.
 
 See https://twitter.com/tweegeemee/media for the latest images.
 
+Each tweet has a name based on the timestamp of creation with a suffix
+at the end, a link to a github gist and a hashtag (currently #ProceduralArt).
+
+The link to a github gist highlight the code used to create the image.
+
 Follow, Favorite and Retweet [tweegeemee](https://twitter.com/tweegeemee)
 images to select them for future generations.
 
@@ -49,6 +54,35 @@ post and get this running on Heroku.
 If you just want to create & breed your own imagery, see the bottom of
 core.clj for snippets to generate & show a random image, breed images
 by hand and mutate images.
+
+### Making your own images
+
+Perhaps you'd like to reproduce one of the images posted?  Maybe, you
+want a desktop background or something like that?
+
+First, click that tweet's link to go to the github gist data structure.  For example,
+
+```clj
+ { :name "150613_061332_D.clj" :hash -504503564 :image-hash -1696445894
+   :code (clisk.live/vdivide (clisk.live/vfrac (clisk.live/vmin (clisk.live/v+ (clisk.live/alpha clisk.live/grain) [-0.9438 0.4027 2.3753 1.7962]) (clisk.live/sigmoid (clisk.live/vfloor [0.4416 -2.6627 -1.6566])))) (clisk.live/gradient (clisk.live/square (clisk.live/v- [-0.2226 -2.2105 -2.7124 -1.7799] clisk.live/vsnoise))))
+ }
+```
+
+Next, load up a repl and evaluate the :code at your preferred resolution
+
+```clj
+(def d { :name "150613_061332_D.clj" :hash -504503564 :image-hash -1696445894
+   :code (clisk.live/vdivide (clisk.live/vfrac (clisk.live/vmin (clisk.live/v+ (clisk.live/alpha clisk.live/grain) [-0.9438 0.4027 2.3753 1.7962]) (clisk.live/sigmoid (clisk.live/vfloor [0.4416 -2.6627 -1.6566])))) (clisk.live/gradient (clisk.live/square (clisk.live/v- [-0.2226 -2.2105 -2.7124 -1.7799] clisk.live/vsnoise))))
+ })
+
+(show (eval (:code d)) :width 720 :height 720)
+```
+
+To save an image, do
+
+```clj
+(write-png "nice_one.png" (image (eval (:code d)) :width 720 :height 720))
+```
 
 ## License
 
