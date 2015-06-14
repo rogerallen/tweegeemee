@@ -153,7 +153,7 @@
   (if (< (rand) prob-term-fn)
     (rand-nth (seq term-fns))
     (let [x (rand-nth (seq term-vals))]
-      (if (not= x 'pos) (x) x))))
+      (if (not= x `pos) (x) x))))
 ;;(random-terminal)
 
 (defn- random-code
@@ -213,7 +213,7 @@
   [node]
   (if (term-vals node)
     ;; must be pos--offset it
-    (cons 'v+ (cons (random-vec2) '(pos)))
+    (cons `v+ (cons (random-vec2) '(clisk.live/pos)))
     (if (term-fns node)
       (rand-nth (seq term-fns))
       (if (unary-fns node)
@@ -277,7 +277,6 @@
     (if (nil? new-node)
       (replace-loc loc2 loc3)
       (replace-loc-with-node loc1 new-node))))
-;;(mutate '(v+ 1.0 (v* pos [2.0 3.0])))
 
 (defn- good-random-code?
   "does it have at least one paren?"
