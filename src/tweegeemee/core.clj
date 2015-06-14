@@ -95,8 +95,7 @@
 
 (defn- read-gist-archive-data
   []
-  (-> (read-str-from-gist-archive)
-      (edn/read-string)))
+  (edn/read-string (read-str-from-gist-archive)))
 
 (defn- my-pr-str
   "take array of maps and output them.  only works for data I expect. :^)"
@@ -143,7 +142,7 @@
   "return a random value in the range (-3,3) with only 4 significant digits
   to increase readability"
   []
-  (let [x (* 3 (- (rand 2) 1))
+  (let [x (* 3 (dec (rand 2)))
         x (/ (Math/floor (* x 10000)) 10000.0)]
     x))
 ;;(random-value)
@@ -164,7 +163,7 @@
   gets smaller.  Functions are not parameter-checked so runtime
   exceptions can be expected."
   ([depth]
-   (if (and (> depth 0) (> (rand-int depth) 0))
+   (if (and (pos? depth) (pos? (rand-int depth)))
      (if (< (rand) prob-ternary-fn)
        (cons (random-fn 3) (repeatedly 3 #(random-code (dec depth))))
        (if (< (rand) prob-binary-fn)
@@ -227,7 +226,7 @@
 
 (defn- mutate-node
   [node]
-  (if (< (rand) 0.95) ;; mostly mutate here
+  (when (< (rand) 0.95) ;; mostly mutate here, return nil 5%
     (condp = (type node)
       ;;* If the node is a scalar value, it can be adjusted by the
       ;;addition of some random amount.
@@ -255,14 +254,14 @@
         ;;inverse of the previous [next] type of mutation.
         (rand-nth (rest node)))
       (println "UNEXPECTED TYPE:" node (class node))
-      )
-    ;;[See mutate fn]* Finally, a node can become a copy of another node from the
-    ;;parent expression. For example (+ (abs X) (* Y .6)) might
-    ;;become (+ (abs (* Y .6)) (* Y .6)). This causes effects similar to
-    ;;those caused by mating an expression with itself. It allows for
-    ;;sub-expressions to duplicate themselves within the overall
-    ;;expression.
-    nil))
+      )))
+;;[See mutate fn]* Finally, a node can become a copy of another node from the
+;;parent expression. For example (+ (abs X) (* Y .6)) might
+;;become (+ (abs (* Y .6)) (* Y .6)). This causes effects similar to
+;;those caused by mating an expression with itself. It allows for
+;;sub-expressions to duplicate themselves within the overall
+;;expression.
+
 ;;[TBD]* An expression can become the argument to a new random
 ;;function. Other arguments are generated at random if
 ;;necessary. For example X might become (* X .3).
@@ -341,14 +340,14 @@
       (try
         (let [cur-code (code-creator-fn)
               ;;_ (println "\n??" cur-code)
-              _ (when (not (nil? (old-hashes (hash cur-code))))
+              _ (when-not (nil? (old-hashes (hash cur-code)))
                   (throw (Exception. "previously created code")))
-              _ (when (not (good-random-code? cur-code))
+              _ (when-not (good-random-code? cur-code)
                   (throw (Exception. "badly created code")))
               img (image (eval cur-code) :size test-size)
-              _ (when (not (nil? (old-image-hashes (image-hash img))))
+              _ (when-not (nil? (old-image-hashes (image-hash img)))
                   (throw (Exception. "previously created image")))
-              _ (when (not (good-image? img))
+              _ (when-not (good-image? img)
                   (throw (Exception. "boring image")))]
           ;; no exception
           (println "\n" @cur-count "got:" cur-code)
@@ -442,9 +441,8 @@
   "be careful with strange code you download from the web, son.  Only
   allow fns in the set of fns we know about."
   [code-str]
-  (let [code-fns (->> (re-seq #"\(.+? " code-str)
-                      (map #(symbol
-                             (clojure.string/replace % #"[\( ]" ""))))
+  (let [code-fns (map #(symbol (clojure.string/replace % #"[\( ]" ""))
+                      (re-seq #"\(.+? " code-str))
         code-fn-set (set code-fns)]
     (set/subset? code-fn-set fns)))
 
@@ -456,8 +454,7 @@
                               :oauth-creds @my-twitter-creds
                               :params {:count num-tweets-for-parent-search
                                        :screen-name @my-screen-name}))
-                      (map #(assoc % :text
-                                   (clojure.string/replace (:text %) #" http.*" "")))
+                      (map #(update-in % [:text] clojure.string/replace #" http.*" ""))
                       (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
                       (map #(assoc % :score (score-status %)))
                       (sort-by :score)
