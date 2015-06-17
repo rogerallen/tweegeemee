@@ -34,6 +34,7 @@
   nil)
 
 ;; ======================================================================
+(defonce DEBUG-NO-POSTING             false) ;; set true when you don't want to post
 (defonce min-color-value              36) ;; not too dark
 (defonce min-color-difference         10) ;; not too similar
 (defonce test-size                    16)
@@ -42,6 +43,7 @@
 (defonce gist-archive-filename        "1_archive.edn")
 (defonce num-tweets-for-parent-search 60) ;; 24 hrs/ every 3 = 8x * 6 imgs = 48
 (defonce num-parents-to-breed         5)
+(defonce num-code-tries               200)
 
 ;; Functions for use in creating imagery.
 (declare random-value)
@@ -120,13 +122,16 @@
 
 (defn- append-to-gist
   [filename code]
-  (update-gist-archive-data
-   {:name       filename
-    :hash       (hash code)
-    :image-hash (image-hash (image (eval code) :size test-size))
-    :code       (str code)
-    }))
-;; (append-to-gist "test6" 0.175)
+  (if DEBUG-NO-POSTING
+    (do
+      (println "DEBUG: NOT APPENDING CODE TO GIST")
+      0)
+    (update-gist-archive-data
+     {:name       filename
+      :hash       (hash code)
+      :image-hash (image-hash (image (eval code) :size test-size))
+      :code       (str code)
+      })))
 
 ;; ======================================================================
 (defn- random-fn
@@ -280,9 +285,8 @@
 
 (defn- good-random-code?
   "does it have at least one paren?"
-  [code]
-  (let [code-str (str code)]
-    (and (>= (count (filter #(= % \( ) code-str)) 1))))
+  [x]
+  (= (first (pr-str x)) \( ))
 
 (defn- good-colors?
   "are the values of a single color component too low or not different
@@ -333,7 +337,7 @@
         good-image (atom false)
         [old-hashes old-image-hashes] (get-old-hashes)
         good-code  (atom nil)]
-    (while (and (< @cur-count 200)
+    (while (and (< @cur-count num-code-tries)
                 (not @good-image))
       (swap! cur-count inc)
       (try
@@ -413,19 +417,19 @@
 
 (defn- post-to-twitter
   [status-text the-image-filename]
-  (try
-    (if false
-      (println "NOT posting to twitter" status-text)
-      (tw/statuses-update-with-media
-       :oauth-creds @my-twitter-creds
-       :body [(tw-req/file-body-part the-image-filename)
-              (tw-req/status-body-part status-text)]))
-    (catch Exception e
-      ;; FIXME -- why does this always have a remote-closed exception?
-      (println "caught expected? twitter exception" (.getMessage e))))
-  (println "waiting for a 5 seconds...")
-  (Thread/sleep 5000))
-
+  (if DEBUG-NO-POSTING
+    (println "NOT posting to twitter" status-text)
+    (do
+      (try
+        (tw/statuses-update-with-media
+         :oauth-creds @my-twitter-creds
+         :body [(tw-req/file-body-part the-image-filename)
+                (tw-req/status-body-part status-text)])
+        (catch Exception e
+          ;; FIXME -- why does this always have a remote-closed exception?
+          (println "caught expected? twitter exception" (.getMessage e))))
+      (println "waiting for a 5 seconds...")
+      (Thread/sleep 5000))))
 
 (defn sanitize-url
   [url]
@@ -618,7 +622,7 @@
 
   ;; breed things by hand...
   (def rents (get-parent-tweet-codes 5))
-  (show (eval (nth rents 0)))
+  (show (eval (nth rents 4)))
   (def dad (rand-nth rents))
   (def mom (rand-nth rents))
   (show (eval dad))
@@ -642,13 +646,37 @@
   ;; Careful!
   (post-mutants-to-web "VWXYZ")
 
-  ;; to reproduce the heroku failure, do:
-  ;;   lein with-profile production compile :all
-  ;;   lein trampoline run
-
   (try (tw/statuses-update
         :oauth-creds @my-twitter-creds
         :params {:status "testing from home"})
        (catch Exception e (println "Oh no! " (.getMessage e))))
 
-  )
+  ;; Look at the frequency of instructions
+  (def archive (read-gist-archive-data))
+  (defn get-fns [s]
+    (filter #(not= % "")
+            (-> (clojure.string/replace s #"clisk.live/|\(|\)|\[|\]|\.|[0-9]" "")
+                (clojure.string/replace #" -" "")
+                (clojure.string/split #" "))))
+  (println (sort-by val (frequencies (sort (mapcat #(get-fns (:code %)) archive)))))
+  (println (sort-by val (frequencies (sort (mapcat #(get-fns (:code %)) (drop 200 archive))))))
+
+  ([E- 1]
+   [turbulence 12] [vnoise 13] [cross 15]
+   [plasma 21] [vplasma 21] [noise 23] [clamp 25] [blotches 29]
+   [scale 32] [splasma 32] [dot 32] [vsplasma 35] [vturbulence 36]
+   [offset 41] [vpow 42] [spots 46] [snoise 47] [lerp 47] [grain 48] [v* 49]
+   [vmax 51] [min-component 53] [saturation-from-rgb 54] [vdivide 55] [hue-from-rgb 58] [vsnoise 58] [vmod 59]
+   [rgb-from-hsl 62] [pos 63] [v+ 63] [y 63] [red-from-hsl 64] [normalize 65] [vround 68]
+   [z 71] [adjust-hue 71] [adjust-hsl 74] [vabs 74] [max-component 74] [hsl-from-rgb 74] [length 76] [vcos 78] [v- 78] [vsqrt 78] [vconcat 79]
+   [blue-from-hsl 81] [green-from-hsl 83] [alpha 83] [vmin 84] [t 85] [vfloor 88]
+   [lightness-from-rgb 96] [x 97] [gradient 98]
+   [square 107] [vfrac 109]
+   [vsin 119]
+   [sigmoid 120] [checker 123]) ;; <<< not crazy.  checker is really popular
+
+  ) ;; comment
+
+;; to reproduce the heroku environment, do:
+;;   lein with-profile production compile :all
+;;   lein trampoline run
