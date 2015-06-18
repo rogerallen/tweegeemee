@@ -16,8 +16,8 @@ Currently posting a batch of new images every 3 hours. The suffix at
 the end of the image name tells you generation-type: a,b are random;
 C,D are sexually reproduced and M,N are mutants with only one parent.
 
-For reproduction, the last 60 tweets are considered. The top 5 are allowed to
-produce offspring.
+For reproduction, the last 200 tweets are considered. The top 5 are
+allowed to produce offspring.
 
 Oh, what is "트의기미"?  That is the Korean (Hangul) characters for
 twee (트의) gee (기) mee (미).  I believe it is just a nonsense word

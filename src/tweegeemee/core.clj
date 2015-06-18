@@ -34,18 +34,23 @@
   nil)
 
 ;; ======================================================================
-(defonce DEBUG-NO-POSTING             false) ;; set true when you don't want to post
-(defonce min-color-value              36) ;; not too dark
-(defonce min-color-difference         10) ;; not too similar
-(defonce test-size                    16)
-(defonce full-size                    720)
-(defonce max-code-depth               10)
-(defonce gist-archive-filename        "1_archive.edn")
-(defonce num-tweets-for-parent-search 60) ;; 24 hrs/ every 3 = 8x * 6 imgs = 48
-(defonce num-parents-to-breed         5)
-(defonce num-code-tries               200)
+(defonce DEBUG-NO-POSTING          false) ;; set true when you don't want to post
+(defonce MIN-IMAGE-COMPONENT-VALUE 36)    ;; not too dark
+(defonce MIN-IMAGE-COMPONENT-DELTA 10)    ;; not too similar
+(defonce TEST-IMAGE-SIZE           16)    ;; size for boring & img-hash check
+(defonce IMAGE-SIZE                720)   ;; size to post
+(defonce MAX-RANDOM-CODE-DEPTH     10)    ;; emperically got to this...
+(defonce GIST-ARCHIVE-FILENAME     "1_archive.edn")
+(defonce NUM-PARENT-TWEETS         200)   ;; 8 posts/day * 6 imgs = 48 img/day
+(defonce MAX-POSSIBLE-PARENTS      5)     ;;
+(defonce MAX-GOOD-CODE-ATTEMPTS    200)   ;; don't want to give up too quickly
+(defonce PROB-TERM-FN              0.1)   ;; probability of term-fn vs term-vals
+(defonce PROB-TERNARY-FN           0.02)  ;; vs. binary or unary
+(defonce PROB-BINARY-FN            0.3)   ;; vs ternary or unary
+(defonce PROB-SINGLE-MUTATION      0.95)  ;; mostly mutate vs. copy
 
-;; Functions for use in creating imagery.
+;; ======================================================================
+;; Functions used in creating imagery.
 (declare random-value)
 (defn- random-scalar [] (random-value))
 (defn- random-vec2 [] [(random-value) (random-value)])
@@ -68,39 +73,42 @@
                   `adjust-hue `adjust-hsl `vconcat})
 (def ternary-fns #{`lerp `clamp})
 (def fns (set/union unary-fns binary-fns ternary-fns))
-;; Probabilities
-(def prob-term-fn    0.1)  ;; vs terminal values
-(def prob-ternary-fn 0.02) ;; vs. binary or unary
-(def prob-binary-fn  0.3)  ;; vs ternary or unary
 
 ;; ======================================================================
 ;; gist stuff
 (declare image-hash)
 (defn- write-str-to-gist-archive
+  "write data-str to the GIST-ARCHIVE-FILENAME within the
+  @my-gist-archive-id.  Throws an exception on failure."
   [data-str]
   (let [resp (gists/edit-gist
               @my-gist-archive-id
               {:auth @my-gist-auth
-               :files { gist-archive-filename { :content data-str }}})]
+               :files { GIST-ARCHIVE-FILENAME { :content data-str }}})]
     (if (nil? (:status resp))
       resp
       (throw (Exception. (str "gist error" (:message (:body resp))))))))
 
 (defn- read-str-from-gist-archive
+  "return str from the GIST-ARCHIVE-FILENAME within the
+  @my-gist-archive-id.  Throws an exception on failure."
   []
   (let [resp (gists/specific-gist @my-gist-archive-id {:auth @my-gist-auth})]
     (if (nil? (:status resp))
       (-> (:files resp)
-          ((keyword gist-archive-filename))
+          ((keyword GIST-ARCHIVE-FILENAME))
           :content)
       (throw (Exception. (str "gist error" (:message (:body resp))))))))
 
 (defn- read-gist-archive-data
+  "parse edn-formatted data from the GIST-ARCHIVE-FILENAME within the
+  @my-gist-archive-id."
   []
   (edn/read-string (read-str-from-gist-archive)))
 
-(defn- my-pr-str
-  "take array of maps and output them.  only works for data I expect. :^)"
+(defn- gist-print-data
+  "take array of dicts and return as str.  dicts better be formatted
+  as I expect."
   [data]
   (str "[\n"
        (reduce (fn [a b]
@@ -111,16 +119,21 @@
        ))
 
 (defn- update-gist-archive-data
-  "add the data to the archive, return the line number for the info"
+  "append new-data dict data to the GIST-ARCHIVE-FILENAME within the
+  @my-gist-archive-id. Return the line number for the new-data entry
+  in the file."
   [new-data]
   (let [old-archive-data (read-gist-archive-data)
         new-archive-data (conj old-archive-data new-data)
         line-number      (+ 2 (* 3 (dec (count new-archive-data))))
-        new-archive-str  (my-pr-str new-archive-data)]
+        new-archive-str  (gist-print-data new-archive-data)]
     (write-str-to-gist-archive new-archive-str)
     line-number))
 
 (defn- append-to-gist
+  "Generate data dict from filename & code to append to the
+  GIST-ARCHIVE-FILENAME within the @my-gist-archive-id. Return the
+  line number for the new-data entry in the file."
   [filename code]
   (if DEBUG-NO-POSTING
     (do
@@ -129,13 +142,14 @@
     (update-gist-archive-data
      {:name       filename
       :hash       (hash code)
-      :image-hash (image-hash (image (eval code) :size test-size))
+      :image-hash (image-hash (image (eval code) :size TEST-IMAGE-SIZE))
       :code       (pr-str code)
       })))
 
 ;; ======================================================================
 (defn- random-fn
-  "return a random function.  Parameter n selects either 1 or 2 parameters."
+  "return a random function.  Parameter n selects either 1 or 2
+  parameters."
   [n]
   (case n
     3 (rand-nth (seq ternary-fns))
@@ -144,8 +158,8 @@
 ;;(random-fn 3)
 
 (defn- random-value
-  "return a random value in the range (-3,3) with only 4 significant digits
-  to increase readability"
+  "return a random value in the range (-3,3) with only 4 significant
+  digits to increase readability"
   []
   (let [x (* 3 (dec (rand 2)))
         x (/ (Math/floor (* x 10000)) 10000.0)]
@@ -155,7 +169,7 @@
 (defn- random-terminal
   "return a random terminal value: vectors, position, or noise."
   []
-  (if (< (rand) prob-term-fn)
+  (if (< (rand) PROB-TERM-FN)
     (rand-nth (seq term-fns))
     (let [x (rand-nth (seq term-vals))]
       (if (not= x `pos) (x) x))))
@@ -169,17 +183,18 @@
   exceptions can be expected."
   ([depth]
    (if (and (pos? depth) (pos? (rand-int depth)))
-     (if (< (rand) prob-ternary-fn)
+     (if (< (rand) PROB-TERNARY-FN)
        (cons (random-fn 3) (repeatedly 3 #(random-code (dec depth))))
-       (if (< (rand) prob-binary-fn)
+       (if (< (rand) PROB-BINARY-FN)
          (cons (random-fn 2) (repeatedly 2 #(random-code (dec depth))))
          (cons (random-fn 1) (repeatedly 1 #(random-code (dec depth))))))
      (random-terminal))))
 ;;(random-code 5)
 
 (defn- locs
-  "return all zip locations within the s-expression.  each location contains the
-  full context within the tree for use in replacement later."
+  "return all zip locations within the s-expression.  each location
+  contains the full context within the tree for use in replacement
+  later."
   [G]
   (let [zipper (zip/seq-zip G)
         all-locs (take-while (complement zip/end?) (iterate zip/next zipper))]
@@ -193,14 +208,14 @@
   (filter #(not (fns (zip/node %))) (locs G)))
 
 (defn- replace-loc
-  "replace the location loc1 with the location loc2, returning the root (full
-  s-expression) of loc1."
+  "replace the location loc1 with the location loc2, returning the
+  root (full s-expression) of loc1."
   [loc1 loc2]
   (zip/root (zip/replace loc1 (zip/node loc2))))
 
 (defn- replace-loc-with-node
-  "replace the location loc1 with the location loc2, returning the root (full
-  s-expression) of loc1."
+  "replace the location loc1 with the location loc2, returning the
+  root (full s-expression) of loc1."
   [loc1 node2]
   (zip/root (zip/replace loc1 node2)))
 
@@ -214,7 +229,9 @@
     ;;(println "\nLOC2" loc2)
     (replace-loc loc1 loc2)))
 
-(defn- mutate-just-a-node
+(defn- mutate-symbol
+  "helper function for mutate-node.  Mutates symbols according to Karl
+  Sims' SIGGRAPH paper."
   [node]
   (if (term-vals node)
     ;; must be pos--offset it
@@ -230,8 +247,10 @@
             (println "UNEXPECTED NODE:" node)))))))
 
 (defn- mutate-node
+  "Mutates code nodes according to Karl Sims' SIGGRAPH paper.  Returns
+  nil sometimes to allow for copying other nodes in calling fn"
   [node]
-  (when (< (rand) 0.95) ;; mostly mutate here, return nil 5%
+  (when (< (rand) PROB-SINGLE-MUTATION) ;; mostly mutate here, return nil 5%
     (condp = (type node)
       ;;* If the node is a scalar value, it can be adjusted by the
       ;;addition of some random amount.
@@ -247,13 +266,13 @@
       ;;if necessary to the correct number and types.
       ;;[I will keep to same function type]
       clisk.node.Node
-      (mutate-just-a-node node)
+      (mutate-symbol node)
       clojure.lang.Symbol
-      (mutate-just-a-node node)
+      (mutate-symbol node)
       clojure.lang.PersistentList
       (if (< (rand) 0.5)
         ;; variation on above
-        (cons (mutate-just-a-node (first node)) (rest node))
+        (cons (mutate-symbol (first node)) (rest node))
         ;;* An argument to a function can jump out and become the new value
         ;;for that node. For example (* X .3) might become X. This is the
         ;;inverse of the previous [next] type of mutation.
@@ -272,6 +291,7 @@
 ;;necessary. For example X might become (* X .3).
 
 (defn- mutate
+  "mutate the code string L according to Karl Sims' SIGGRAPH paper."
   [L]
   (let [loc1      (rand-nth (locs L))
         loc2      (rand-nth (locs-ex-fns L))
@@ -280,28 +300,29 @@
         ;;_ (println "newnode" new-node)
         ]
     (if (nil? new-node)
+      ;; copy random nodes & sub-nodes
       (replace-loc loc2 loc3)
+      ;; or, replace with new mutant
       (replace-loc-with-node loc1 new-node))))
 
 (defn- good-random-code?
-  "does it have at least one paren?"
+  "does code x have at least one paren?"
   [x]
   (= (first (pr-str x)) \( ))
 
-(defn- good-colors?
-  "are the values of a single color component too low or not different
-  enough?"
+(defn- good-components?
+  "are the values of a single color component too dark or not
+  different enough?"
   [colors]
   (let [min-v (apply min colors)
         max-v (apply max colors)]
-    ;;(println (format "%x %x" min-v max-v))
-    (and (> max-v min-color-value)
-         (> (- max-v min-v) min-color-difference))))
+    (and (> max-v MIN-IMAGE-COMPONENT-VALUE)
+         (> (- max-v min-v) MIN-IMAGE-COMPONENT-DELTA))))
 
-(defn- third [x] (nth x 2))
+(defn- third [x] (nth x 2)) ;; should be stdlib
 
 (defn- good-image?
-  "is the image not a constant color?"
+  "is img not a dark, boring image?"
   [img]
   (let [W (.getWidth img)
         H (.getHeight img)
@@ -311,33 +332,38 @@
                       (bit-shift-right (bit-and % 0x000000ff) 0))
                     (for [x (range W) y (range H)]
                       (.getRGB img x y)))]
-    (or (good-colors? (map first values))
-        (good-colors? (map second values))
-        (good-colors? (map third values)))))
+    (or (good-components? (map first values))
+        (good-components? (map second values))
+        (good-components? (map third values)))))
 
 (defn- image-hash
-  "hash the colors in an image"
+  "hash the colors in an image so we can figure out if we've created
+  this one before."
   [img]
   (let [W (.getWidth img)
         H (.getHeight img)]
     (hash (for [x (range W) y (range H)] (.getRGB img x y)))))
 
 (defn- get-old-hashes
+  "return a vector of :hash and :image-hash data from the gist
+  archive."
   []
   (let [data (read-gist-archive-data)
         old-hashes (set (map :hash data))
         old-image-hashes (set (map :image-hash data))]
     [old-hashes old-image-hashes]))
-;; (get-old-hashes)
 
 (defn- get-good-code*
-  "given a code-creator-fn, get some code that creates non-boring images."
+  "The main code-generation workhorse function.  Given a
+  code-creator-fn (random, breed or combine), return some code that
+  creates non-boring images.  Tries for a while, but if it gives up,
+  it returns nil."
   [code-creator-fn]
   (let [cur-count  (atom 0)
         good-image (atom false)
         [old-hashes old-image-hashes] (get-old-hashes)
         good-code  (atom nil)]
-    (while (and (< @cur-count num-code-tries)
+    (while (and (< @cur-count MAX-GOOD-CODE-ATTEMPTS)
                 (not @good-image))
       (swap! cur-count inc)
       (try
@@ -347,12 +373,12 @@
                   (throw (Exception. "previously created code")))
               _ (when-not (good-random-code? cur-code)
                   (throw (Exception. "badly created code")))
-              img (image (eval cur-code) :size test-size)
+              img (image (eval cur-code) :size TEST-IMAGE-SIZE)
               _ (when-not (nil? (old-image-hashes (image-hash img)))
                   (throw (Exception. "previously created image")))
               _ (when-not (good-image? img)
                   (throw (Exception. "boring image")))]
-          ;; no exception
+          ;; no exception--got a good one
           (println "\n" @cur-count "got:" cur-code)
           (reset! good-image true)
           (reset! good-code cur-code))
@@ -369,7 +395,7 @@
 (defn- get-random-code
   "get a good image-creation code created randomly"
   []
-  (get-good-code* (fn [] (random-code max-code-depth))))
+  (get-good-code* (fn [] (random-code MAX-RANDOM-CODE-DEPTH))))
 
 (defn- write-png
   "write the-image to filename (which should have a .png suffix)"
@@ -377,15 +403,17 @@
   (ImageIO/write the-image "png" (File. filename)))
 
 (defn- get-timestamp-str
+  "return a timestamp for the current time"
   []
   (.format (java.text.SimpleDateFormat. "yyMMdd_HHmmss") (System/currentTimeMillis)))
 
 (defn- get-our-file-seq
+  "return a file-seq of our images/*.clj and images/*.png files"
   []
   (filter #(re-matches #".*\.clj|.*\.png" (.getName %)) (file-seq (io/file "images"))))
-;; (nth (get-our-file-seq) 5)
 
 (defn- cleanup-our-files!
+  "remove all of our images/*.clj and images/*.png files"
   []
   (dorun (map #(io/delete-file %) (get-our-file-seq))))
 
@@ -402,13 +430,14 @@
   (str timestamp "_" suffix ".clj"))
 
 (defn- make-random-code-and-png
-  "make random code and save as files. return the code, clj-filename and png-filename"
+  "make random code and save as files. return the code, clj-filename
+  and png-filename"
   [timestamp suffix]
   (let [my-code (get-random-code)]
     (if (nil? my-code)
       [nil nil nil]
       (let [png-filename (get-png-filename timestamp suffix)
-            my-image (image (eval my-code) :size full-size)
+            my-image (image (eval my-code) :size IMAGE-SIZE)
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
@@ -416,6 +445,7 @@
         [my-code clj-basename png-filename]))))
 
 (defn- post-to-twitter
+  "post status-text and the-image to twitter"
   [status-text the-image-filename]
   (if DEBUG-NO-POSTING
     (println "NOT posting to twitter" status-text)
@@ -431,12 +461,13 @@
       (println "waiting for a 5 seconds...")
       (Thread/sleep 5000))))
 
-(defn sanitize-url
+(defn sanitize-filename
   [url]
   (clojure.string/replace url "." "-"))
 
 (defn- score-status
-  "retweets count more than favorites"
+  "return a score for a image's tweet based on favorites and
+  retweets. retweets count more than favorites"
   [status]
   (+ (* 3 (:retweet_count status)) (:favorite_count status)))
 
@@ -450,12 +481,12 @@
     (set/subset? code-fn-set fns)))
 
 (defn- get-parent-tweet-codes
-  "return a sequence of the N highest-scoring two tweets code"
+  "return a sequence of the N highest-scoring tweet's code"
   [N]
   (let [archive  (read-gist-archive-data)
         statuses (->> (:body (tw/statuses-user-timeline
                               :oauth-creds @my-twitter-creds
-                              :params {:count num-tweets-for-parent-search
+                              :params {:count NUM-PARENT-TWEETS
                                        :screen-name @my-screen-name}))
                       (map #(update-in % [:text] clojure.string/replace #" http.*" ""))
                       (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
@@ -487,7 +518,7 @@
     (if (nil? my-code)
       [nil nil nil]
       (let [png-filename (get-png-filename timestamp suffix)
-            my-image (image (eval my-code) :size full-size)
+            my-image (image (eval my-code) :size IMAGE-SIZE)
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
@@ -499,6 +530,8 @@
   [code]
   (get-good-code* (fn [] (mutate code))))
 
+;; REFACTOR - make-random-XXX routines above also have a lot in common.
+
 (defn- make-random-mutant-and-png
   "take a code, mutate it and save as files. return the code,
   clj-filename and png-filename"
@@ -507,7 +540,7 @@
     (if (nil? my-code)
       [nil nil nil]
       (let [png-filename (get-png-filename timestamp suffix)
-            my-image (image (eval my-code) :size full-size)
+            my-image (image (eval my-code) :size IMAGE-SIZE)
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
@@ -525,12 +558,12 @@
   (let [gist-line-number (append-to-gist clj-filename the-code)
         gist-url         (str "https://gist.github.com/rogerallen/"
                               @my-gist-archive-id
-                              "#file-" (sanitize-url gist-archive-filename)
+                              "#file-" (sanitize-filename GIST-ARCHIVE-FILENAME)
                               "-L" gist-line-number "-L" (+ 2 gist-line-number))
         status-text (str clj-filename " " gist-url " #ProceduralArt")]
   (post-to-twitter status-text png-filename)))
 
-;; FIXME - post-XXX-to-web routines below have a lot in common...
+;; REFACTOR - post-XXX-to-web routines below have a lot in common...
 
 (defn post-random-batch-to-web
   "Post a batch of random codes & images to twitter and github."
@@ -549,7 +582,7 @@
   bred from those parents to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweet-codes num-parents-to-breed)
+        rents         (get-parent-tweet-codes MAX-POSSIBLE-PARENTS)
         c0            (rand-nth rents)
         c1            (rand-nth rents)]
     (dorun
@@ -564,7 +597,7 @@
   mutated from the top parent to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweet-codes num-parents-to-breed)
+        rents         (get-parent-tweet-codes MAX-POSSIBLE-PARENTS)
         c0            (rand-nth rents)
         c1            (rand-nth rents)]
     (dorun
@@ -575,6 +608,8 @@
            (post-to-web the-code clj-filename png-filename)))))))
 
 (defn post-a-set-to-web
+  "what we do every N hours--post a set of tweets to the web.  See
+  code for latest recipe."
   []
   (println "======================================================================")
   (println "posting a set of 6: random ab, children CD, mutant MN")
@@ -584,7 +619,9 @@
   (cleanup-our-files!)
   (println "posting complete."))
 
-(defn gen-handler [t opts]
+(defn gen-handler
+  "cronj handler function to post-a-set-to-web"
+  [t opts]
   (println (:output opts) ": " t)
   (post-a-set-to-web))
 
@@ -602,26 +639,20 @@
   (cj/start! cur-cronj))
 
 ;; ======================================================================
+;; Example usage to explore at the repl
 ;; ======================================================================
-(comment ;; code below to test things out
+(comment
 
+  ;; be sure to get this setup
   (setup-env!)
 
   ;; generate & show a random image
   (let [c (get-random-code)]
     (show (eval c)))
 
-  ;; post an image to the web (careful!)
-  (let [[the-code clj-filename png-filename]
-        (make-random-code-and-png (get-timestamp-str) "s")]
-    (post-to-web the-code clj-filename png-filename))
-
-  ;; Careful!
-  (post-random-batch-to-web "r")
-
-  ;; breed things by hand...
+  ;; breed images by hand...
   (def rents (get-parent-tweet-codes 5))
-  (show (eval (nth rents 4)))
+  (show (eval (nth rents 0)))
   (def dad (rand-nth rents))
   (def mom (rand-nth rents))
   (show (eval dad))
@@ -631,9 +662,7 @@
     (if (not (nil? c))
       (show (eval c))))
 
-  ;; Careful!
-  (post-children-to-web "ABCDE")
-
+  ;; breed mutants by hand...
   (def rents (get-parent-tweet-codes 5))
   (def dad (rand-nth rents))
   (show (eval dad))
@@ -641,14 +670,6 @@
         _ (println c)]
     (if (not (nil? c))
       (show (eval c))))
-
-  ;; Careful!
-  (post-mutants-to-web "VWXYZ")
-
-  (try (tw/statuses-update
-        :oauth-creds @my-twitter-creds
-        :params {:status "testing from home"})
-       (catch Exception e (println "Oh no! " (.getMessage e))))
 
   ;; Look at the frequency of instructions
   (def archive (read-gist-archive-data))
@@ -660,19 +681,27 @@
   (println (sort-by val (frequencies (sort (mapcat #(get-fns (:code %)) archive)))))
   (println (sort-by val (frequencies (sort (mapcat #(get-fns (:code %)) (drop 200 archive))))))
 
-  ([E- 1]
-   [turbulence 12] [vnoise 13] [cross 15]
-   [plasma 21] [vplasma 21] [noise 23] [clamp 25] [blotches 29]
-   [scale 32] [splasma 32] [dot 32] [vsplasma 35] [vturbulence 36]
-   [offset 41] [vpow 42] [spots 46] [snoise 47] [lerp 47] [grain 48] [v* 49]
-   [vmax 51] [min-component 53] [saturation-from-rgb 54] [vdivide 55] [hue-from-rgb 58] [vsnoise 58] [vmod 59]
-   [rgb-from-hsl 62] [pos 63] [v+ 63] [y 63] [red-from-hsl 64] [normalize 65] [vround 68]
-   [z 71] [adjust-hue 71] [adjust-hsl 74] [vabs 74] [max-component 74] [hsl-from-rgb 74] [length 76] [vcos 78] [v- 78] [vsqrt 78] [vconcat 79]
-   [blue-from-hsl 81] [green-from-hsl 83] [alpha 83] [vmin 84] [t 85] [vfloor 88]
-   [lightness-from-rgb 96] [x 97] [gradient 98]
-   [square 107] [vfrac 109]
-   [vsin 119]
-   [sigmoid 120] [checker 123]) ;; <<< not crazy.  checker is really popular
+  ;; ----------------------------------------------------------------------
+  ;; NOTE that code below this point posts to the web
+
+  ;; post a random image to the web
+  (let [[the-code clj-filename png-filename]
+        (make-random-code-and-png (get-timestamp-str) "s")]
+    (post-to-web the-code clj-filename png-filename))
+
+  ;; Careful!
+  (post-random-batch-to-web "r")
+
+  ;; Careful!
+  (post-children-to-web "ABCDE")
+
+  ;; Careful!
+  (post-mutants-to-web "VWXYZ")
+
+  (try (tw/statuses-update
+        :oauth-creds @my-twitter-creds
+        :params {:status "testing from home"})
+       (catch Exception e (println "Oh no! " (.getMessage e))))
 
   ) ;; comment
 
