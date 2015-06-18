@@ -130,7 +130,7 @@
      {:name       filename
       :hash       (hash code)
       :image-hash (image-hash (image (eval code) :size test-size))
-      :code       (str code)
+      :code       (pr-str code)
       })))
 
 ;; ======================================================================
@@ -412,7 +412,7 @@
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
-        (spit clj-filename (str my-code))
+        (spit clj-filename (pr-str my-code))
         [my-code clj-basename png-filename]))))
 
 (defn- post-to-twitter
@@ -491,7 +491,7 @@
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
-        (spit clj-filename (str my-code))
+        (spit clj-filename (pr-str my-code))
         [my-code clj-basename png-filename]))))
 
 (defn- get-random-mutant
@@ -511,7 +511,7 @@
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
-        (spit clj-filename (str my-code))
+        (spit clj-filename (pr-str my-code))
         [my-code clj-basename png-filename]))))
 
 ;; ======================================================================
@@ -605,7 +605,6 @@
 ;; ======================================================================
 (comment ;; code below to test things out
 
-  (env :tweegeemee-version)
   (setup-env!)
 
   ;; generate & show a random image
