@@ -448,7 +448,7 @@
   "post status-text and the-image to twitter"
   [status-text the-image-filename]
   (if DEBUG-NO-POSTING
-    (println "NOT posting to twitter" status-text)
+    (println "DEBUG: NOT POSTING TO TWITTER" status-text)
     (do
       (try
         (tw/statuses-update-with-media
@@ -571,11 +571,12 @@
   (let [timestamp-str (get-timestamp-str)]
     (dorun
      (doseq [suffix suffix-str]
-       (let [[the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)]
+       (let [_ (println "random begin" suffix)
+             [the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)]
          (if (nil? the-code)
            (println "!!! suffix" suffix "unable to create random image")
            (post-to-web the-code clj-filename png-filename)))))
-    (println "done.")))
+    (println "random done.")))
 
 (defn post-children-to-web
   "Find the highest-scoring parents, post a batch of codes & images
@@ -587,10 +588,12 @@
         c1            (rand-nth rents)]
     (dorun
      (doseq [suffix suffix-str]
-       (let [[the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
+       (let [_ (println "repro begin" suffix)
+             [the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
          (if (nil? the-code)
            (println "!!! suffix" suffix "unable to create child image")
-           (post-to-web the-code clj-filename png-filename)))))))
+           (post-to-web the-code clj-filename png-filename)))))
+    (println "repro done.")))
 
 (defn post-mutants-to-web
   "Find the highest-scoring parents, post a batch of 5 codes & images
@@ -602,10 +605,12 @@
         c1            (rand-nth rents)]
     (dorun
      (doseq [suffix suffix-str]
-       (let [[the-code clj-filename png-filename] (make-random-mutant-and-png c0 timestamp-str suffix)]
+       (let [_ (println "mutant begin" suffix)
+             [the-code clj-filename png-filename] (make-random-mutant-and-png c0 timestamp-str suffix)]
          (if (nil? the-code)
            (println "!!! suffix" suffix "unable to create mutant image")
-           (post-to-web the-code clj-filename png-filename)))))))
+           (post-to-web the-code clj-filename png-filename)))))
+    (println "mutant done.")))
 
 (defn post-a-set-to-web
   "what we do every N hours--post a set of tweets to the web.  See
