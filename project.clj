@@ -1,4 +1,4 @@
-(defproject tweegeemee "1.1.5"
+(defproject tweegeemee "1.1.6"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
@@ -12,8 +12,8 @@
   :main         ^:skip-aot tweegeemee.core
   :min-lein-version "2.0.0"
   :plugins      [[lein-environ "1.0.0"]]
-  ;; Enable full optimizer, don't let heap get too big
-  :jvm-opts     ^:replace ["-Xms128m" "-Xmx400m" "-Xss512k"]
+  ;; Enable full optimizer, don't let heap or metaspace get too big
+  :jvm-opts     ^:replace ["-Xms128m" "-Xmx350m" "-Xss512k" "-XX:MaxMetaspaceSize=150m"]
   :target-path  "target/%s"
   :profiles     {:uberjar {:aot :all}}
   )
