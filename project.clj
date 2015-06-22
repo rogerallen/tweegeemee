@@ -1,4 +1,4 @@
-(defproject tweegeemee "1.1.8"
+(defproject tweegeemee "1.1.9"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
@@ -13,8 +13,8 @@
   :min-lein-version "2.0.0"
   :plugins      [[lein-environ "1.0.0"]]
   ;; Enable full optimizer, don't let heap or metaspace get too big
-  ;; 300+150=450 allowing 62mb for the process
-  :jvm-opts     ^:replace ["-Xms128m" "-Xmx298m" "-Xss512k" "-XX:MaxMetaspaceSize=148m"]
+  ;; 296+146=442 allowing 70mb for the process
+  :jvm-opts     ^:replace ["-Xms128m" "-Xmx296m" "-Xss512k" "-XX:MaxMetaspaceSize=146m"]
   :target-path  "target/%s"
   :profiles     {:uberjar {:aot :all}}
   )
