@@ -34,7 +34,7 @@
   nil)
 
 ;; ======================================================================
-(defonce DEBUG-NO-POSTING          false) ;; set true when you don't want to post
+(def     DEBUG-NO-POSTING          false) ;; set true when you don't want to post
 (defonce MIN-IMAGE-COMPONENT-VALUE 36)    ;; not too dark
 (defonce MIN-IMAGE-COMPONENT-DELTA 10)    ;; not too similar
 (defonce TEST-IMAGE-SIZE           16)    ;; size for boring & img-hash check
@@ -429,21 +429,6 @@
   [timestamp suffix]
   (str timestamp "_" suffix ".clj"))
 
-(defn- make-random-code-and-png
-  "make random code and save as files. return the code, clj-filename
-  and png-filename"
-  [timestamp suffix]
-  (let [my-code (get-random-code)]
-    (if (nil? my-code)
-      [nil nil nil]
-      (let [png-filename (get-png-filename timestamp suffix)
-            my-image (image (eval my-code) :size IMAGE-SIZE)
-            clj-filename (get-clj-filename timestamp suffix)
-            clj-basename (get-clj-basename timestamp suffix)]
-        (write-png png-filename my-image)
-        (spit clj-filename (pr-str my-code))
-        [my-code clj-basename png-filename]))))
-
 (defn- post-to-twitter
   "post status-text and the-image to twitter"
   [status-text the-image-filename]
@@ -510,42 +495,45 @@
   [code0 code1]
   (get-good-code* (fn [] (breed code0 code1))))
 
-(defn- make-random-child-and-png
-  "take 2 codes, breed them and save as files. return the code,
-  clj-filename and png-filename"
-  [code0 code1 timestamp suffix]
-  (let [my-code (get-random-child code0 code1)]
-    (if (nil? my-code)
-      [nil nil nil]
-      (let [png-filename (get-png-filename timestamp suffix)
-            my-image (image (eval my-code) :size IMAGE-SIZE)
-            clj-filename (get-clj-filename timestamp suffix)
-            clj-basename (get-clj-basename timestamp suffix)]
-        (write-png png-filename my-image)
-        (spit clj-filename (pr-str my-code))
-        [my-code clj-basename png-filename]))))
-
 (defn- get-random-mutant
   "get a good image-creation code created via mutating a code"
   [code]
   (get-good-code* (fn [] (mutate code))))
 
-;; REFACTOR - make-random-XXX routines above also have a lot in common.
-
-(defn- make-random-mutant-and-png
-  "take a code, mutate it and save as files. return the code,
+(defn- make-code-and-png*
+  "make code from code-fn and save as files. return the code,
   clj-filename and png-filename"
-  [code timestamp suffix]
-  (let [my-code (get-random-mutant code)]
+  [code-fn timestamp suffix]
+  (let [my-code (code-fn)]
     (if (nil? my-code)
       [nil nil nil]
       (let [png-filename (get-png-filename timestamp suffix)
-            my-image (image (eval my-code) :size IMAGE-SIZE)
+            my-image     (image (eval my-code) :size IMAGE-SIZE)
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
         (spit clj-filename (pr-str my-code))
         [my-code clj-basename png-filename]))))
+
+(defn- make-random-code-and-png
+  "make random code and save as files. return the code, clj-filename
+  and png-filename"
+  [timestamp suffix]
+  (make-code-and-png* get-random-code timestamp suffix))
+
+(defn- make-random-child-and-png
+  "take 2 codes, breed them and save as files. return the code,
+  clj-filename and png-filename"
+  [code0 code1 timestamp suffix]
+  (make-code-and-png* (partial get-random-child code0 code1)
+                      timestamp suffix))
+
+(defn- make-random-mutant-and-png
+  "take a code, mutate it and save as files. return the code,
+  clj-filename and png-filename"
+  [code timestamp suffix]
+  (make-code-and-png* (partial get-random-mutant code)
+                      timestamp suffix))
 
 ;; ======================================================================
 ;; Public API ===========================================================
@@ -565,18 +553,24 @@
 
 ;; REFACTOR - post-XXX-to-web routines below have a lot in common...
 
+(defn post-batch-to-web*
+  "Post a batch of random codes & images to twitter and github."
+  [make-fn post-str suffix-str]
+  (dorun
+   (doseq [suffix suffix-str]
+     (let [_ (println post-str "begin" suffix)
+           [the-code clj-filename png-filename] (make-fn suffix)]
+       (if (nil? the-code)
+         (println "!!! suffix" suffix "unable to create" post-str "image")
+         (post-to-web the-code clj-filename png-filename)))))
+  (println post-str "done."))
+
 (defn post-random-batch-to-web
   "Post a batch of random codes & images to twitter and github."
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)]
-    (dorun
-     (doseq [suffix suffix-str]
-       (let [_ (println "random begin" suffix)
-             [the-code clj-filename png-filename] (make-random-code-and-png timestamp-str suffix)]
-         (if (nil? the-code)
-           (println "!!! suffix" suffix "unable to create random image")
-           (post-to-web the-code clj-filename png-filename)))))
-    (println "random done.")))
+    (post-batch-to-web* (partial make-random-code-and-png timestamp-str)
+                        "random" suffix-str)))
 
 (defn post-children-to-web
   "Find the highest-scoring parents, post a batch of codes & images
@@ -586,14 +580,8 @@
         rents         (get-parent-tweet-codes MAX-POSSIBLE-PARENTS)
         c0            (rand-nth rents)
         c1            (rand-nth rents)]
-    (dorun
-     (doseq [suffix suffix-str]
-       (let [_ (println "repro begin" suffix)
-             [the-code clj-filename png-filename] (make-random-child-and-png c0 c1 timestamp-str suffix)]
-         (if (nil? the-code)
-           (println "!!! suffix" suffix "unable to create child image")
-           (post-to-web the-code clj-filename png-filename)))))
-    (println "repro done.")))
+    (post-batch-to-web* (partial make-random-child-and-png c0 c1 timestamp-str)
+                        "repro" suffix-str)))
 
 (defn post-mutants-to-web
   "Find the highest-scoring parents, post a batch of 5 codes & images
@@ -601,16 +589,9 @@
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
         rents         (get-parent-tweet-codes MAX-POSSIBLE-PARENTS)
-        c0            (rand-nth rents)
-        c1            (rand-nth rents)]
-    (dorun
-     (doseq [suffix suffix-str]
-       (let [_ (println "mutant begin" suffix)
-             [the-code clj-filename png-filename] (make-random-mutant-and-png c0 timestamp-str suffix)]
-         (if (nil? the-code)
-           (println "!!! suffix" suffix "unable to create mutant image")
-           (post-to-web the-code clj-filename png-filename)))))
-    (println "mutant done.")))
+        c0            (rand-nth rents)]
+    (post-batch-to-web* (partial make-random-mutant-and-png c0 timestamp-str)
+                        "mutant" suffix-str)))
 
 (defn post-a-set-to-web
   "what we do every N hours--post a set of tweets to the web.  See
