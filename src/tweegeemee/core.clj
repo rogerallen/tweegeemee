@@ -112,8 +112,8 @@
   [data]
   (str "[\n"
        (reduce (fn [a b]
-                 (format "%s { :name \"%s\" :hash %d :image-hash %d\n   :code %s\n }\n"
-                         a (:name b) (:hash b) (:image-hash b) (:code b)))
+                 (format "%s { :name \"%s\" :parents %s :hash %d :image-hash %d\n   :code %s\n }\n"
+                         a (:name b) (:parents b) (:hash b) (:image-hash b) (:code b)))
                "" data)
        "]\n"
        ))
@@ -134,7 +134,7 @@
   "Generate data dict from filename & code to append to the
   GIST-ARCHIVE-FILENAME within the @my-gist-archive-id. Return the
   line number for the new-data entry in the file."
-  [filename code]
+  [filename code parent-vec]
   (if DEBUG-NO-POSTING
     (do
       (println "DEBUG: NOT APPENDING CODE TO GIST")
@@ -144,6 +144,7 @@
       :hash       (hash code)
       :image-hash (image-hash (image (eval code) :size TEST-IMAGE-SIZE))
       :code       (pr-str code)
+      :parents    parent-vec
       })))
 
 ;; ======================================================================
@@ -465,8 +466,9 @@
         code-fn-set (set code-fns)]
     (set/subset? code-fn-set fns)))
 
-(defn- get-parent-tweet-codes
-  "return a sequence of the N highest-scoring tweet's code"
+(defn- get-parent-tweets
+  "return a sequence of the N highest-scoring tweets.  Tweet data is
+  from the gist file."
   [N]
   (let [archive  (read-gist-archive-data)
         statuses (->> (:body (tw/statuses-user-timeline
@@ -480,12 +482,10 @@
                       (reverse)
                       (map :text)
                       (mapcat #(filter (fn [x] (= (:name x) %)) archive))
-                      (map :code)
-                      (map str)
-                      (filter sanity-check-code)
+                      (filter #(sanity-check-code (str (:code %))))
                       (take N)
                       ;;((fn [x] (println "post-take:" x) x))
-                      (map read-string)
+                      (map #(update-in % [:code] (fn [x] (read-string (str x)))))
                       )]
     statuses))
 
@@ -542,8 +542,8 @@
 (defn post-to-web
   "Post the-code + clj-filename info to gist.github.com, post
   png-filename & a pointer to twitter."
-  [the-code clj-filename png-filename]
-  (let [gist-line-number (append-to-gist clj-filename the-code)
+  [the-code clj-filename png-filename parent-vec]
+  (let [gist-line-number (append-to-gist clj-filename the-code parent-vec)
         gist-url         (str "https://gist.github.com/rogerallen/"
                               @my-gist-archive-id
                               "#file-" (sanitize-filename GIST-ARCHIVE-FILENAME)
@@ -551,18 +551,16 @@
         status-text (str clj-filename " " gist-url " #ProceduralArt")]
   (post-to-twitter status-text png-filename)))
 
-;; REFACTOR - post-XXX-to-web routines below have a lot in common...
-
 (defn post-batch-to-web*
   "Post a batch of random codes & images to twitter and github."
-  [make-fn post-str suffix-str]
+  [make-fn post-str suffix-str parent-vec]
   (dorun
    (doseq [suffix suffix-str]
      (let [_ (println post-str "begin" suffix)
            [the-code clj-filename png-filename] (make-fn suffix)]
        (if (nil? the-code)
          (println "!!! suffix" suffix "unable to create" post-str "image")
-         (post-to-web the-code clj-filename png-filename)))))
+         (post-to-web the-code clj-filename png-filename parent-vec)))))
   (println post-str "done."))
 
 (defn post-random-batch-to-web
@@ -570,28 +568,28 @@
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)]
     (post-batch-to-web* (partial make-random-code-and-png timestamp-str)
-                        "random" suffix-str)))
+                        "random" suffix-str [])))
 
 (defn post-children-to-web
   "Find the highest-scoring parents, post a batch of codes & images
   bred from those parents to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweet-codes MAX-POSSIBLE-PARENTS)
+        rents         (get-parent-tweets MAX-POSSIBLE-PARENTS)
         c0            (rand-nth rents)
         c1            (rand-nth rents)]
-    (post-batch-to-web* (partial make-random-child-and-png c0 c1 timestamp-str)
-                        "repro" suffix-str)))
+    (post-batch-to-web* (partial make-random-child-and-png (:code c0) (:code c1) timestamp-str)
+                        "repro" suffix-str [(:name c0) (:name c1)])))
 
 (defn post-mutants-to-web
   "Find the highest-scoring parents, post a batch of 5 codes & images
   mutated from the top parent to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweet-codes MAX-POSSIBLE-PARENTS)
+        rents         (get-parent-tweets MAX-POSSIBLE-PARENTS)
         c0            (rand-nth rents)]
-    (post-batch-to-web* (partial make-random-mutant-and-png c0 timestamp-str)
-                        "mutant" suffix-str)))
+    (post-batch-to-web* (partial make-random-mutant-and-png (:code c0) timestamp-str)
+                        "mutant" suffix-str [(:name c0)])))
 
 (defn post-a-set-to-web
   "what we do every N hours--post a set of tweets to the web.  See
@@ -637,10 +635,9 @@
     (show (eval c)))
 
   ;; breed images by hand...
-  (def rents (get-parent-tweet-codes 5))
-  (show (eval (nth rents 0)))
-  (def dad (rand-nth rents))
-  (def mom (rand-nth rents))
+  (def rents (get-parent-tweets 5))
+  (def dad (:code (rand-nth rents)))
+  (def mom (:code (rand-nth rents)))
   (show (eval dad))
   (show (eval mom))
   (let [c (get-random-child dad mom)
@@ -649,8 +646,8 @@
       (show (eval c))))
 
   ;; breed mutants by hand...
-  (def rents (get-parent-tweet-codes 5))
-  (def dad (rand-nth rents))
+  (def rents (get-parent-tweets 5))
+  (def dad (:code (rand-nth rents)))
   (show (eval dad))
   (let [c (get-random-mutant dad)
         _ (println c)]
