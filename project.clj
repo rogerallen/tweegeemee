@@ -1,4 +1,4 @@
-(defproject tweegeemee "1.2.0"
+(defproject tweegeemee "1.2.1"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
@@ -13,10 +13,10 @@
   :min-lein-version "2.0.0"
   :plugins      [[lein-environ "1.0.0"]]
   ;; Enable full optimizer, don't let heap or metaspace get too big
-  ;; 266+146=412 allowing 100mb for the process
+  ;; 260+140=400 allowing 112mb for the process
   ;; finally adding the max direct mem size.  see what that does
-  :jvm-opts     ^:replace ["-Xss512k" "-Xms128m" "-Xmx266m"
-                           "-XX:MaxMetaspaceSize=146m"
+  :jvm-opts     ^:replace ["-Xss512k" "-Xms128m" "-Xmx260m"
+                           "-XX:MaxMetaspaceSize=140m"
                            "-XX:MaxDirectMemorySize=50m"]
   :target-path  "target/%s"
   :profiles     {:uberjar {:aot :all}}
