@@ -612,7 +612,7 @@
 (def cur-cronj
   (cj/cronj :entries [{:id "gen-task"
                        :handler gen-handler
-                       :schedule "0 13 /3 * * * *"   ;; every 3 hours at 13 past
+                       :schedule "0 25 /3 * * * *"   ;; every 3 hours at 25 past
                        ;;:schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
                        ;;:schedule "0 /5 * * * * *"  ;; every 5 mins for testing
                        :opts {:output "posting every 3 hours"}}]))
@@ -685,6 +685,15 @@
         :oauth-creds @my-twitter-creds
         :params {:status "testing from home"})
        (catch Exception e (println "Oh no! " (.getMessage e))))
+
+  ;; genealogy
+  (def rents (get-parent-tweets 5))
+  (def data (read-gist-archive-data))
+  (defn get-by-name [name] (first (filter #(= name (:name %)) data)))
+  (def cur (nth rents 0))
+  (show (eval (:code cur)))
+  (def cur (get-by-name (first (:parents cur))))
+  (def cur (get-by-name (second (:parents cur))))
 
   ) ;; comment
 
