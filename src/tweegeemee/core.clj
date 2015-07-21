@@ -369,7 +369,7 @@
       (swap! cur-count inc)
       (try
         (let [cur-code (code-creator-fn)
-              ;;_ (println "\n??" cur-code)
+              _ (println "\n??" cur-code)
               _ (when-not (nil? (old-hashes (hash cur-code)))
                   (throw (Exception. "previously created code")))
               _ (when-not (good-random-code? cur-code)
@@ -384,11 +384,11 @@
           (reset! good-image true)
           (reset! good-code cur-code))
         (catch Exception e
-          ;;(println @cur-count "Exception" (.getMessage e))
+          (println @cur-count "Exception" (.getMessage e))
           (print "e")
           )
         (catch java.util.concurrent.ExecutionException e
-          ;;(println @cur-count "execution exception")
+          (println @cur-count "execution exception")
           (print "E")
           )))
     @good-code))
@@ -620,7 +620,9 @@
 (defn -main [& args]
   (println "Started version" (env :tweegeemee-version))
   (setup-env!)
-  (cj/start! cur-cronj))
+  (post-random-batch-to-web "r")
+  ;;(cj/start! cur-cronj)
+  )
 
 ;; ======================================================================
 ;; Example usage to explore at the repl
