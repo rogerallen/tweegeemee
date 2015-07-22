@@ -95,9 +95,13 @@
   []
   (let [resp (gists/specific-gist @my-gist-archive-id {:auth @my-gist-auth})]
     (if (nil? (:status resp))
-      (-> (:files resp)
-          ((keyword GIST-ARCHIVE-FILENAME))
-          :content)
+      (if (-> (:files resp)
+              ((keyword GIST-ARCHIVE-FILENAME))
+              :truncated)
+        (throw (Exception. (str "truncated gist error")))
+        (-> (:files resp)
+            ((keyword GIST-ARCHIVE-FILENAME))
+            :content))
       (throw (Exception. (str "gist error" (:message (:body resp))))))))
 
 (defn- read-gist-archive-data
@@ -360,38 +364,42 @@
   creates non-boring images.  Tries for a while, but if it gives up,
   it returns nil."
   [code-creator-fn]
-  (let [cur-count  (atom 0)
-        good-image (atom false)
-        [old-hashes old-image-hashes] (get-old-hashes)
-        good-code  (atom nil)]
-    (while (and (< @cur-count MAX-GOOD-CODE-ATTEMPTS)
-                (not @good-image))
-      (swap! cur-count inc)
-      (try
-        (let [cur-code (code-creator-fn)
-              _ (println "\n??" cur-code)
-              _ (when-not (nil? (old-hashes (hash cur-code)))
-                  (throw (Exception. "previously created code")))
-              _ (when-not (good-random-code? cur-code)
-                  (throw (Exception. "badly created code")))
-              img (image (eval cur-code) :size TEST-IMAGE-SIZE)
-              _ (when-not (nil? (old-image-hashes (image-hash img)))
-                  (throw (Exception. "previously created image")))
-              _ (when-not (good-image? img)
-                  (throw (Exception. "boring image")))]
-          ;; no exception--got a good one
-          (println "\n" @cur-count "got:" cur-code)
-          (reset! good-image true)
-          (reset! good-code cur-code))
-        (catch Exception e
-          (println @cur-count "Exception" (.getMessage e))
-          (print "e")
-          )
-        (catch java.util.concurrent.ExecutionException e
-          (println @cur-count "execution exception")
-          (print "E")
-          )))
-    @good-code))
+  (try
+    (let [cur-count  (atom 0)
+          good-image (atom false)
+          [old-hashes old-image-hashes] (get-old-hashes)
+          good-code  (atom nil)]
+      (while (and (< @cur-count MAX-GOOD-CODE-ATTEMPTS)
+                  (not @good-image))
+        (swap! cur-count inc)
+        (try
+          (let [cur-code (code-creator-fn)
+                ;;_ (println "\n??" cur-code)
+                _ (when-not (nil? (old-hashes (hash cur-code)))
+                    (throw (Exception. "previously created code")))
+                _ (when-not (good-random-code? cur-code)
+                    (throw (Exception. "badly created code")))
+                img (image (eval cur-code) :size TEST-IMAGE-SIZE)
+                _ (when-not (nil? (old-image-hashes (image-hash img)))
+                    (throw (Exception. "previously created image")))
+                _ (when-not (good-image? img)
+                    (throw (Exception. "boring image")))]
+            ;; no exception--got a good one
+            (println "\n" @cur-count "got:" cur-code)
+            (reset! good-image true)
+            (reset! good-code cur-code))
+          (catch Exception e
+            ;;(println @cur-count "Exception" (.getMessage e))
+            (print "e")
+            )
+          (catch java.util.concurrent.ExecutionException e
+            ;;(println @cur-count "execution exception")
+            (print "E")
+            )))
+      @good-code)
+    (catch Exception e
+      (println "get-good-code* Setup Exception" (.getMessage e))
+      nil)))
 
 (defn- get-random-code
   "get a good image-creation code created randomly"
@@ -612,7 +620,7 @@
 (def cur-cronj
   (cj/cronj :entries [{:id "gen-task"
                        :handler gen-handler
-                       :schedule "0 25 /3 * * * *"   ;; every 3 hours at 25 past
+                       :schedule "0 6 /3 * * * *"   ;; every 3 hours at 6 past
                        ;;:schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
                        ;;:schedule "0 /5 * * * * *"  ;; every 5 mins for testing
                        :opts {:output "posting every 3 hours"}}]))
@@ -620,9 +628,7 @@
 (defn -main [& args]
   (println "Started version" (env :tweegeemee-version))
   (setup-env!)
-  (post-random-batch-to-web "r")
-  ;;(cj/start! cur-cronj)
-  )
+  (cj/start! cur-cronj))
 
 ;; ======================================================================
 ;; Example usage to explore at the repl
