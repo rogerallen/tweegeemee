@@ -34,7 +34,7 @@
   nil)
 
 ;; ======================================================================
-(def     DEBUG-NO-POSTING          true) ;; set true when you don't want to post
+(def     DEBUG-NO-POSTING          false) ;; set true when you don't want to post
 (defonce MIN-IMAGE-COMPONENT-VALUE 36)    ;; not too dark
 (defonce MIN-IMAGE-COMPONENT-DELTA 10)    ;; not too similar
 (defonce TEST-IMAGE-SIZE           16)    ;; size for boring & img-hash check
