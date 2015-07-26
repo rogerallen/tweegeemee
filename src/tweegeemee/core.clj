@@ -8,8 +8,8 @@
             [clojure.set         :as set]
             [clojure.edn         :as edn]
             [clojure.java.io     :as io]
-            [tentacles.gists     :as gists]
-            [cronj.core          :as cj])
+            [tentacles.gists     :as gists])
+            ;;[cronj.core          :as cj])
   (:import [java.io File]
            [javax.imageio ImageIO])
   (:gen-class))
@@ -34,7 +34,7 @@
   nil)
 
 ;; ======================================================================
-(def     DEBUG-NO-POSTING          false) ;; set true when you don't want to post
+(def     DEBUG-NO-POSTING          true) ;; set true when you don't want to post
 (defonce MIN-IMAGE-COMPONENT-VALUE 36)    ;; not too dark
 (defonce MIN-IMAGE-COMPONENT-DELTA 10)    ;; not too similar
 (defonce TEST-IMAGE-SIZE           16)    ;; size for boring & img-hash check
@@ -617,18 +617,33 @@
   (println (:output opts) ": " t)
   (post-a-set-to-web))
 
-(def cur-cronj
-  (cj/cronj :entries [{:id "gen-task"
-                       :handler gen-handler
-                       :schedule "0 6 /3 * * * *"   ;; every 3 hours at 6 past
-                       ;;:schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
-                       ;;:schedule "0 /5 * * * * *"  ;; every 5 mins for testing
-                       :opts {:output "posting every 3 hours"}}]))
+;; (def cur-cronj
+;;   (cj/cronj :entries [{:id "gen-task"
+;;                        :handler gen-handler
+;;                        :schedule "0 6 /3 * * * *"   ;; every 3 hours at 6 past
+;;                        ;;:schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
+;;                        ;;:schedule "0 /5 * * * * *"  ;; every 5 mins for testing
+;;                        :opts {:output "posting every 3 hours"}}]))
+;;
+;; (defn -main [& args]
+;;   (println "Started version" (env :tweegeemee-version))
+;;   (setup-env!)
+;;   (cj/start! cur-cronj))
+
+(defn hour-is-right
+  "return true if the current hour is divisible by 3"
+  []
+  (let [hour (.get (java.util.Calendar/getInstance) java.util.Calendar/HOUR_OF_DAY)]
+    (= (mod hour 3) 0)))
 
 (defn -main [& args]
-  (println "Started version" (env :tweegeemee-version))
-  (setup-env!)
-  (cj/start! cur-cronj))
+   (println "Started version" (env :tweegeemee-version))
+   (setup-env!)
+   (if (hour-is-right)
+     (post-a-set-to-web)
+     (println "not the right hour to run."))
+   (shutdown-agents) ;; quit faster
+   0) ;; return 0 status so we don't look like we crashed
 
 ;; ======================================================================
 ;; Example usage to explore at the repl
@@ -697,8 +712,12 @@
   ;; genealogy
   (def rents (get-parent-tweets 5))
   (def data (read-gist-archive-data))
+  (def parent-map (apply hash-map
+                         (mapcat
+                          #(let [v (select-keys % [:name :parents])] [(:name v) (:parents v)])
+                          data)))
   (defn get-by-name [name] (first (filter #(= name (:name %)) data)))
-  (def cur (nth rents 0))
+  (def cur (nth rents 4))
   (show (eval (:code cur)))
   (def cur (get-by-name (first (:parents cur))))
   (def cur (get-by-name (second (:parents cur))))
