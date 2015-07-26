@@ -9,7 +9,6 @@
             [clojure.edn         :as edn]
             [clojure.java.io     :as io]
             [tentacles.gists     :as gists])
-            ;;[cronj.core          :as cj])
   (:import [java.io File]
            [javax.imageio ImageIO])
   (:gen-class))
@@ -599,51 +598,24 @@
     (post-batch-to-web* (partial make-random-mutant-and-png (:code c0) timestamp-str)
                         "mutant" suffix-str [(:name c0)])))
 
-(defn post-a-set-to-web
-  "what we do every N hours--post a set of tweets to the web.  See
-  code for latest recipe."
+(defn cur-hour
+  "return the current hour"
   []
-  (println "======================================================================")
-  (println "posting a set of 6: random ab, children CD, mutant MN")
-  (post-random-batch-to-web "ab")
-  (post-children-to-web "CD")
-  (post-mutants-to-web "MN")
-  (cleanup-our-files!)
-  (println "posting complete."))
-
-(defn gen-handler
-  "cronj handler function to post-a-set-to-web"
-  [t opts]
-  (println (:output opts) ": " t)
-  (post-a-set-to-web))
-
-;; (def cur-cronj
-;;   (cj/cronj :entries [{:id "gen-task"
-;;                        :handler gen-handler
-;;                        :schedule "0 6 /3 * * * *"   ;; every 3 hours at 6 past
-;;                        ;;:schedule "0 15 /1 * * * *" ;; every 1 hours at 15mins past...
-;;                        ;;:schedule "0 /5 * * * * *"  ;; every 5 mins for testing
-;;                        :opts {:output "posting every 3 hours"}}]))
-;;
-;; (defn -main [& args]
-;;   (println "Started version" (env :tweegeemee-version))
-;;   (setup-env!)
-;;   (cj/start! cur-cronj))
-
-(defn hour-is-right
-  "return true if the current hour is divisible by 3"
-  []
-  (let [hour (.get (java.util.Calendar/getInstance) java.util.Calendar/HOUR_OF_DAY)]
-    (= (mod hour 3) 0)))
+  (.get (java.util.Calendar/getInstance) java.util.Calendar/HOUR_OF_DAY))
 
 (defn -main [& args]
-   (println "Started version" (env :tweegeemee-version))
-   (setup-env!)
-   (if (hour-is-right)
-     (post-a-set-to-web)
-     (println "not the right hour to run."))
-   (shutdown-agents) ;; quit faster
-   0) ;; return 0 status so we don't look like we crashed
+  (println "======================================================================")
+  (println "Started version" (env :tweegeemee-version))
+  (println "posting one of: random ab, children CD or mutant MN")
+  (setup-env!)
+  (case (mod (cur-hour) 3)
+    0 (post-random-batch-to-web "ab")
+    1 (post-children-to-web "CD")
+    2 (post-mutants-to-web "MN"))
+  (cleanup-our-files!)
+  (println "posting complete.")
+  (shutdown-agents) ;; quit faster
+  0) ;; return 0 status so we don't look like we crashed
 
 ;; ======================================================================
 ;; Example usage to explore at the repl

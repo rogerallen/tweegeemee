@@ -1,4 +1,4 @@
-(defproject tweegeemee "1.3.0"
+(defproject tweegeemee "1.3.1"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
@@ -8,7 +8,6 @@
                  [environ             "1.0.0"]
                  [net.mikera/clisk    "0.10.0"]
                  [tentacles           "0.3.0"]]
-                 ;;[im.chit/cronj       "1.4.3"]]
   :main         ^:skip-aot tweegeemee.core
   :min-lein-version "2.0.0"
   :plugins      [[lein-environ "1.0.0"]]
