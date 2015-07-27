@@ -12,7 +12,7 @@ The link to a github gist highlights the code used to create the image.
 Follow, Favorite and Retweet [tweegeemee](https://twitter.com/tweegeemee)
 images to select them for future generations.
 
-Currently posting a batch of new images every 3 hours. The suffix at
+Currently posting a set of two new images every hour. The suffix at
 the end of the image name tells you generation-type: a,b are random;
 C,D are sexually reproduced and M,N are mutants with only one parent.
 
@@ -40,16 +40,23 @@ paper](http://www.karlsims.com/papers/siggraph91.html).  But, how to
 decide what constitutes a "good" image to breed?  Well, how about
 using Twitter retweets and favorites for scoring?
 
-I found the [Clisk clojure image library](https://github.com/mikera/clisk)
-was perfect for recreating Sims' imagery.  I also took some inspriration from
-https://github.com/nodename/clevolution, http://www.thattommyhall.com/2013/08/23/genetic-programming-in-clojure-with-zippers/ and http://blog.raynes.me/blog/2011/12/02/waving-our-tentacles/.
+I found the [Clisk clojure image
+library](https://github.com/mikera/clisk) was perfect for recreating
+Sims' imagery.  I also took some inspriration from
+https://github.com/nodename/clevolution,
+http://www.thattommyhall.com/2013/08/23/genetic-programming-in-clojure-with-zippers/
+and http://blog.raynes.me/blog/2011/12/02/waving-our-tentacles/.
 
 So far, this has been quite fun to work on.
 
 ## Usage
 
-You should be able to clone/fork this library, follow the "How I Start"
-post and get this running on Heroku.
+You should be able to clone/fork this library, follow the "How I
+Start" post and get this running on Heroku.  Note that as of version
+1.3, due to Heroku free dynos now requiring 6 hours of sleep in a 24
+hour period, I switched to using the Scheduler add-on.  See [Issue
+11](https://github.com/rogerallen/tweegeemee/issues/11) for more
+information.
 
 If you just want to create & breed your own imagery, see the bottom of
 core.clj for snippets to generate & show a random image, breed images
