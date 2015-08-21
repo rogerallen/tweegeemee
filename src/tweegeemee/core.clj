@@ -36,12 +36,13 @@
 (def     DEBUG-NO-POSTING          false) ;; set true when you don't want to post
 (defonce MIN-IMAGE-COMPONENT-VALUE 36)    ;; not too dark
 (defonce MIN-IMAGE-COMPONENT-DELTA 10)    ;; not too similar
+(defonce MIN-NUM-COLORS            3)     ;; not too few colors (checkers be gone!)
 (defonce TEST-IMAGE-SIZE           16)    ;; size for boring & img-hash check
 (defonce IMAGE-SIZE                720)   ;; size to post
 (defonce MAX-RANDOM-CODE-DEPTH     10)    ;; emperically got to this...
 (defonce GIST-ARCHIVE-FILENAME     "1_archive.edn")
-(defonce NUM-PARENT-TWEETS         200)   ;; 8 posts/day * 6 imgs = 48 img/day
-(defonce MAX-POSSIBLE-PARENTS      5)     ;;
+(defonce NUM-PARENT-TWEETS         200)   ;; 24 posts/day * 2 imgs = 48 img/day = ~4 days
+(defonce MAX-POSSIBLE-PARENTS      5)     ;; top 5 tweets become parents
 (defonce MAX-GOOD-CODE-ATTEMPTS    200)   ;; don't want to give up too quickly
 (defonce PROB-TERM-FN              0.1)   ;; probability of term-fn vs term-vals
 (defonce PROB-TERNARY-FN           0.02)  ;; vs. binary or unary
@@ -326,7 +327,8 @@
 (defn- third [x] (nth x 2)) ;; should be stdlib
 
 (defn- good-image?
-  "is img not a dark, boring image?"
+  "is img not a dark, boring image?  Does it have more than a few
+  colors?"
   [img]
   (let [W (.getWidth img)
         H (.getHeight img)
@@ -335,10 +337,12 @@
                       (bit-shift-right (bit-and % 0x0000ff00) 8)
                       (bit-shift-right (bit-and % 0x000000ff) 0))
                     (for [x (range W) y (range H)]
-                      (.getRGB img x y)))]
-    (or (good-components? (map first values))
-        (good-components? (map second values))
-        (good-components? (map third values)))))
+                      (.getRGB img x y)))
+        val-freq (frequencies values)]
+    (and (> (count val-freq) MIN-NUM-COLORS)
+         (or (good-components? (map first values))
+             (good-components? (map second values))
+             (good-components? (map third values))))))
 
 (defn- image-hash
   "hash the colors in an image so we can figure out if we've created
@@ -686,13 +690,16 @@
   (def data (read-gist-archive-data))
   (def parent-map (apply hash-map
                          (mapcat
-                          #(let [v (select-keys % [:name :parents])] [(:name v) (:parents v)])
+                          #(let [v (select-keys % [:name :parents])]
+                             [(:name v) (:parents v)])
                           data)))
   (defn get-by-name [name] (first (filter #(= name (:name %)) data)))
-  (def cur (nth rents 4))
+  (def cur (nth rents 0))
   (show (eval (:code cur)))
   (def cur (get-by-name (first (:parents cur))))
   (def cur (get-by-name (second (:parents cur))))
+
+  (show (eval (:code (nth rents 1))) :width 900 :height 900)
 
   ) ;; comment
 
