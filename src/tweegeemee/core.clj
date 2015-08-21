@@ -559,7 +559,7 @@
                               @my-gist-archive-id
                               "#file-" (sanitize-filename GIST-ARCHIVE-FILENAME)
                               "-L" gist-line-number "-L" (+ 2 gist-line-number))
-        status-text (str clj-filename " " gist-url " #ProceduralArt")]
+        status-text (str clj-filename " " gist-url " #ProceduralArt #generative")]
   (post-to-twitter status-text png-filename)))
 
 (defn post-batch-to-web*
