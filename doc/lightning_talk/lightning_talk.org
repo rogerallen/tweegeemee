@@ -1,0 +1,177 @@
+* Intro
+
+    Roger Allen
+
+    Day Job: GPU Architect
+
+    Hobby: Creative Coding
+      https://github.com/rogerallen/
+      Overtone (livecoding music)
+      Shadertone (+ shadertoy GLSL)
+      Gridstrument (LinnStrument on Android)
+
+* 트의기미 / Tweegeemee
+
+    트의 Twitter
+    기  Genetic Algorithm
+    미  Imagery
+
+    https://twitter.com/tweegeemee
+    https://github.com/rogerallen/tweegeemee
+
+    Tweegeemee is an artist.
+
+    Tweegeemee is a computer program that makes random images based on
+    per-pixel math formulas.
+
+    Tweegeemee uses positive feedback from twitter users to create new
+    images via genetic algorithms.
+
+    [examples]
+
+* History
+** Karl Sims: SIGGRAPH 1991
+
+    ACM Computer Graphics Conference Paper:
+    http://www.karlsims.com/papers/siggraph91.html
+
+    The second example of artificial evolution involves the generation of
+    textures by mutating symbolic expressions. Equations that calculate a
+    color for each pixel coordinate (x,y) are evolved using a function set
+    containing some standard common lisp functions, vector
+    transformations, procedural noise generators, and image processing
+    operations:
+
+	+, -, *, /, mod, round, min, max, abs, expt, log, and,
+        or, xor, sin, cos, atan, if, dissolve, hsv-to-rgb, vector,
+	transform-vector, bw-noise, color-noise, warped-bw-noise,
+	warped-color-noise, blur, band-pass, grad-mag, grad-dir,
+        bump, ifs, warped-ifs, warp-abs, warp-rel, warp-by-grad.
+
+*** Start Simple
+
+[[./ksf04.gif]] (<- click) [[http://www.karlsims.com/papers/ksf04.gif]]
+    Reading left to right, top to bottom:
+    X
+    Y
+    (abs X)
+    (mod X (abs Y))
+    (and X Y)
+    (bw-noise .2 2)
+    (color-noise .1 2)
+    (grad-direction
+      (bw-noise .15 2) .0 .0)
+    (warped-color-noise
+      (* X .2) Y .1 2)
+
+*** Genetic Algorithms 101
+
+    1. randomly initialize population
+    2. repeat
+       1. rank fitness of population
+       2. select best-fit parents
+       3. breed parents creating population(t+1)
+       4. occasionally add mutations
+    4. until best individual is good enough
+
+*** Evolve Interesting Images
+**** [[./ksf09.gif]]/[[http://www.karlsims.com/papers/ksf09.gif]]
+
+    (round (log (+ y (color-grad (round (+ (abs (round (log (+ y
+    (color-grad (round (+ y (log (invert y) 15.5)) x) 3.1 1.86
+    #(0.95 0.7 0.59) 1.35)) 0.19) x)) (log (invert y) 15.5)) x)
+    3.1 1.9 #(0.95 0.7 0.35) 1.35)) 0.19) x)
+
+**** [[./ksf13.gif]]/[[http://www.karlsims.com/papers/ksf13.gif]]
+
+    (sin (+ (- (grad-direction (blur (if (hsv-to-rgb (warped-
+    color-noise #(0.57 0.73 0.92) (/ 1.85 (warped-color-
+    noise x y 0.02 3.08)) 0.11 2.4)) #(0.54 0.73 0.59) #(1.06
+    0.82 0.06)) 3.1) 1.46 5.9) (hsv-to-rgb (warped-color-
+    noise y (/ 4.5 (warped-color-noise y (/ x y) 2.4 2.4))
+    0.02 2.4))) x))
+
+*** To what end?
+
+    What is the fitness function for an image?
+    What is "good enough"?
+
+    Hmm...
+
+* 2015
+** Carin Meier: How I Start
+
+    https://howistart.org/posts/clojure/1
+
+    create a twitter bot
+
+    a mashup of Edward Lear's poetry, and functional programming text
+
+    deployed code to Heroku where it lives and tweets all on its own
+    for FREE.
+
+** Mike Anderson: Clisk
+
+    https://github.com/mikera/clisk
+
+    a Clojure based DSL/library for procedural image generation.
+
+** Twitter
+
+   Finally a Fitness Function!
+   Twitter retweets & favorites!
+   "Wisdom of Crowds"
+
+   Adam Wynne: twitter-api https://github.com/adamwynne/twitter-api
+
+* Now
+** Runs on Heroku Hourly
+
+Creates a pair of images per hour.
+  - random images
+  - 2-parent children
+  - 1-parent mutants
+
+** Tweets a picture & link
+
+[[./tweet1.png]]
+
+** Genepool stored as gist
+
+https://gist.github.com/rogerallen/bed95b7a8f784fe11ced#file-1_archive-edn-L3740-L3742
+
+ { :name "150817_083143_N.clj"
+   :parents ["150816_093131_a.clj"]
+   :hash -1513926325 :image-hash 1158028256
+   :code (clisk.live/vpow
+          (clisk.live/length clisk.live/plasma)
+          (clisk.live/sigmoid
+           (clisk.live/gradient
+            (clisk.live/green-from-hsl
+             (clisk.live/rgb-from-hsl
+              (clisk.live/v-
+               (clisk.live/v+ [0.3541 -1.1358] clisk.live/pos)
+               (clisk.live/vsin [0.6035 -2.8447 0.9631])))))))
+ }
+
+** Interesting Results
+*** Tweegeemee is a better artist than I am!
+*** Punctuated Equilibrium - A/K/A Artistic Phases
+*** Extinction Events
+
+    Gist gets too big.
+    Easy & Interesting to just start over.
+
+* Next
+** Follow @tweegeemee
+** Get the word out: tell your friends!
+** Favorite & Retweet
+** Help with code, ideas, #tags
+* Code
+
+    https://github.com/rogerallen/tweegeemee/blob/master/src/tweegeemee/core.clj
+    [[../../src/tweegeemee/core.clj]]
+
+** questions?
+** clisk basics?
+** calculate example?
