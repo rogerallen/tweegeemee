@@ -8,7 +8,10 @@
             [clojure.set         :as set]
             [clojure.edn         :as edn]
             [clojure.java.io     :as io]
-            [tentacles.gists     :as gists])
+            [tentacles.gists     :as gists]
+            [clj-time.core       :as t]
+            [clj-time.format     :as tf]
+            [clj-time.periodic   :as tp])
   (:import [java.io File]
            [javax.imageio ImageIO])
   (:gen-class))
@@ -477,6 +480,134 @@
         code-fn-set (set code-fns)]
     (set/subset? code-fn-set fns)))
 
+;; ======================================================================
+;; ideas for facebook/tumbler/etc posts
+;; 1) last week's Top 3
+;; 2) monthly mosaic image.  30 days x 24 images/day (32x32px?)
+;; 3) album: ancestry of last week's post (or a post people talk about)
+;; ======================================================================
+;; http://www.rkn.io/2014/02/13/clojure-cookbook-date-ranges/
+(defn time-range
+  "Return a lazy sequence of DateTime's from start to end, incremented
+  by 'step' units of time."
+  [start end step]
+  (let [inf-range (tp/periodic-seq start step)
+        below-end? (fn [x] (t/within? (t/interval start end)
+                                     x))]
+    (take-while below-end? inf-range)))
+
+(def my-formatter (tf/formatter "YYMMdd"))
+
+(defn day-of-week-today [] (t/day-of-week (t/today-at-midnight)))
+(defn last-monday [] (-> (- (day-of-week-today) 1) t/days t/ago))
+(defn last-sunday [] (-> (- (day-of-week-today) 0) t/days t/ago))
+(defn weekago-monday [] (-> (+ 6 (day-of-week-today)) t/days t/ago))
+(defn weekago-sunday [] (-> (+ 7 (day-of-week-today)) t/days t/ago))
+(defn last-week
+  "sequence of days from last Monday to Sunday"
+  []
+  (time-range (weekago-monday) (last-monday) (t/days 1)))
+
+(defn- get-tgm-statuses
+  ([N]
+   (:body (tw/statuses-user-timeline
+           :oauth-creds @my-twitter-creds
+           :params {:count N
+                    :screen-name @my-screen-name})))
+  ([N max-id]
+   (:body (tw/statuses-user-timeline
+           :oauth-creds @my-twitter-creds
+           :params {:count N
+                    :screen-name @my-screen-name
+                    :max-id max-id}))))
+
+(defn- get-tgm-statuses-until-regex
+  [regex]
+  (loop [new-statuses (get-tgm-statuses 200)
+         old-statuses '()]
+    (let [statuses (concat old-statuses new-statuses)
+          last-id (:id (last statuses))
+          statuses-until-regex (take-while #(not (re-matches regex (:text %))) statuses)]
+      ;;(println "n=" (count statuses) "nn=" (count statuses-until-regex) "id=" last-id)
+      (if (< (count statuses-until-regex) (count statuses))
+        statuses-until-regex
+        (recur (get-tgm-statuses 200 last-id) statuses)))))
+
+(defn- get-todays-statuses
+  "return a sequence of todays statuses."
+  []
+  (let [today-str (.format (java.text.SimpleDateFormat. "yyMMdd") (System/currentTimeMillis))
+        statuses (->> (get-tgm-statuses 100) ;; should be enough
+                      (filter #(re-matches (re-pattern (str "^" today-str "_.*")) (:text %))))]
+    statuses))
+
+(defn- get-last-weeks-statuses
+  []
+  (let [regex-old (re-pattern (str "^" (tf/unparse my-formatter (weekago-sunday)) "_.*"))
+        regex-new (re-pattern (str "^" (tf/unparse my-formatter (last-sunday)) "_.*"))
+        statuses (get-tgm-statuses-until-regex regex-old)
+        ;;_ (println "n1=" (count statuses))
+        statuses (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj .*" (:text %)) statuses)
+        statuses (drop-while #(not (re-matches regex-new (:text %))) statuses)
+        ;;_ (println "n2=" (count statuses))
+        ]
+    statuses))
+
+(defn- get-a-months-statuses
+  [year month]
+  (let [prev-month (dec month)
+        prev-month (if (= prev-month 0) 12 prev-month)
+        prev-year  (if (= month 1) (dec year) year)
+        regex-old (re-pattern (str "^" (format "%02d%02d" prev-year prev-month) ".*"))
+        regex-new (re-pattern (str "^" (format "%02d%02d" year month) ".*"))
+        statuses (get-tgm-statuses-until-regex regex-old)
+        _ (println "n0=" (count statuses))
+        statuses (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj .*" (:text %)) statuses)
+        _ (println "n1=" (count statuses))
+        statuses (drop-while #(not (re-matches regex-new (:text %))) statuses)
+        _ (println "n2=" (count statuses))
+        ]
+    statuses))
+
+(defn- get-gist-status-by-name
+  [data name]
+  (first (filter #(= name (:name %)) data)))
+
+;; Postprocess with e.g.:
+;;   montage -tile 48x30 -geometry 32x32 1512*png a.png
+(defn- render-a-months-statuses
+  [year month]
+  (let [statuses (get-a-months-statuses year month)
+        data     (read-gist-archive-data)] ;; FIXME take archive name
+    (doseq [s statuses]
+      (let [name         (clojure.string/replace (:text s) #" http.*" "")
+            my-code      (:code (get-gist-status-by-name data name))
+            _            (println name "::" my-code)
+            my-image     (image (eval my-code) :size 32)
+            png-filename (str "images/mosaic/" name ".png")]
+        (write-png png-filename my-image)))))
+
+(defn- get-top-n
+  "return a sequence of the N highest-scoring tweet image links."
+  [fn N]
+  (let [statuses (->> (fn);; (get-todays-statuses)
+                      (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj .*" (:text %)))
+                      (map #(assoc % :score (score-status %)))
+                      (map #(dissoc % :user :extended_entities))
+                      (sort-by :score)
+                      (reverse)
+                      (take N))]
+    statuses))
+
+;; (get-top-n get-last-weeks-statuses 3)
+(defn print-top-n
+  [fn N]
+  (doseq [s (get-top-n fn N)]
+    (let [score (:score s)
+          url   (-> s :entities :media first :expanded_url)]
+      (println score url))))
+;;(print-top-n get-last-weeks-statuses 3)
+
 (defn- get-parent-tweets
   "return a sequence of the N highest-scoring tweets.  Tweet data is
   from the gist file."
@@ -639,8 +770,7 @@
   (def mom (:code (rand-nth rents)))
   (show (eval dad))
   (show (eval mom))
-  (let [c (get-random-child dad mom)
-        _ (println c)]
+  (let [c (get-random-child dad mom)]
     (if (not (nil? c))
       (show (eval c))))
 
@@ -648,8 +778,7 @@
   (def rents (get-parent-tweets 5))
   (def dad (:code (rand-nth rents)))
   (show (eval dad))
-  (let [c (get-random-mutant dad)
-        _ (println c)]
+  (let [c (get-random-mutant dad)]
     (if (not (nil? c))
       (show (eval c))))
 
@@ -700,6 +829,9 @@
   (def cur (get-by-name (second (:parents cur))))
 
   (show (eval (:code (nth rents 1))) :width 900 :height 900)
+
+  ;; Facebook update helpers
+  (print-top-n get-last-weeks-statuses 3)
 
   ) ;; comment
 
