@@ -37,8 +37,9 @@
 
 ;; ======================================================================
 (def     DEBUG-NO-POSTING          false) ;; set true when you don't want to post
-(defonce MIN-IMAGE-COMPONENT-VALUE 36)    ;; not too dark
-(defonce MIN-IMAGE-COMPONENT-DELTA 10)    ;; not too similar
+(defonce MAX-ALL-COMPONENT-VALUE   220)   ;; not too white
+(defonce MIN-ALL-COMPONENT-VALUE   36)    ;; not too dark
+(defonce MIN-ALL-COMPONENT-DELTA   10)    ;; not too similar
 (defonce MIN-NUM-COLORS            3)     ;; not too few colors (checkers be gone!)
 (defonce TEST-IMAGE-SIZE           16)    ;; size for boring & img-hash check
 (defonce IMAGE-SIZE                720)   ;; size to post
@@ -96,7 +97,12 @@
   "return str from the GIST-ARCHIVE-FILENAME within the
   @my-gist-archive-id.  Throws an exception on failure."
   []
-  (let [resp (gists/specific-gist @my-gist-archive-id {:auth @my-gist-auth})]
+  (let [resp (try
+               (gists/specific-gist @my-gist-archive-id {:auth @my-gist-auth})
+               (catch Exception e
+                 (println "gist read exception: " (.getMessage e))
+                 [] ;; return empty response
+                 ))]
     (if (nil? (:status resp))
       (if (-> (:files resp)
               ((keyword GIST-ARCHIVE-FILENAME))
@@ -324,8 +330,9 @@
   [colors]
   (let [min-v (apply min colors)
         max-v (apply max colors)]
-    (and (> max-v MIN-IMAGE-COMPONENT-VALUE)
-         (> (- max-v min-v) MIN-IMAGE-COMPONENT-DELTA))))
+    (and (< min-v MAX-ALL-COMPONENT-VALUE)
+         (> max-v MIN-ALL-COMPONENT-VALUE)
+         (> (- max-v min-v) MIN-ALL-COMPONENT-DELTA))))
 
 (defn- third [x] (nth x 2)) ;; should be stdlib
 
@@ -831,7 +838,7 @@
   (show (eval (:code (nth rents 1))) :width 900 :height 900)
 
   ;; Facebook update helpers
-  (print-top-n get-last-weeks-statuses 3)
+  (print-top-n get-last-weeks-statuses 5)
 
   ) ;; comment
 
