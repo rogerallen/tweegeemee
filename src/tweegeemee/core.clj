@@ -33,6 +33,9 @@
   (reset! my-screen-name     (env :screen-name))
   (reset! my-gist-auth       (env :gist-auth))
   (reset! my-gist-archive-id (env :gist-archive-id))
+  (when-let [seed (env :clisk-random-seed)]
+    (clisk.patterns/seed-perlin-noise! seed)
+    (clisk.patterns/seed-simplex-noise! seed))
   nil)
 
 ;; ======================================================================
@@ -561,6 +564,7 @@
     statuses))
 
 (defn- get-a-months-statuses
+  "ex. (get-a-months-statuses 16 1)"
   [year month]
   (let [prev-month (dec month)
         prev-month (if (= prev-month 0) 12 prev-month)
@@ -568,12 +572,8 @@
         regex-old (re-pattern (str "^" (format "%02d%02d" prev-year prev-month) ".*"))
         regex-new (re-pattern (str "^" (format "%02d%02d" year month) ".*"))
         statuses (get-tgm-statuses-until-regex regex-old)
-        _ (println "n0=" (count statuses))
         statuses (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj .*" (:text %)) statuses)
-        _ (println "n1=" (count statuses))
-        statuses (drop-while #(not (re-matches regex-new (:text %))) statuses)
-        _ (println "n2=" (count statuses))
-        ]
+        statuses (drop-while #(not (re-matches regex-new (:text %))) statuses)]
     statuses))
 
 (defn- get-gist-status-by-name
@@ -592,6 +592,16 @@
             _            (println name "::" my-code)
             my-image     (image (eval my-code) :size 32)
             png-filename (str "images/mosaic/" name ".png")]
+        (write-png png-filename my-image)))))
+
+(defn- render-statuses
+  [names size]
+  (let [data (read-gist-archive-data)] ;; FIXME take archive name
+    (doseq [name names]
+      (let [my-code      (:code (get-gist-status-by-name data name))
+            _            (println name "::" my-code)
+            my-image     (image (eval my-code) :size size)
+            png-filename (str "images/tiles/" name ".png")]
         (write-png png-filename my-image)))))
 
 (defn- get-top-n
@@ -614,6 +624,27 @@
           url   (-> s :entities :media first :expanded_url)]
       (println score url))))
 ;;(print-top-n get-last-weeks-statuses 3)
+
+;; geneaology
+(defn- layout-generations
+  [child parent-map]
+  (let [layout (atom [])] ;; vector of vectors [x y num-parents name]
+    (defn update-layout
+      [child generation y]
+      (let [parents (parent-map child)
+            num-parents (count parents)]
+        ;;(println generation y (count parents) child)
+        ;; if I was smarter, maybe I'd be able to conj this below...
+        (swap! layout #(conj % [generation y num-parents child]))
+        (if (empty? parents)
+          [(inc y) [generation y num-parents child]]
+          (let [generation (inc generation)]
+            (reduce #(do ;; (println "x" y %1 %2)
+                       (update-layout (first %2) generation (max (first %1) (+ y (second %2)))))
+                    [y []]
+                    (map vector parents (range num-parents)))))))
+    (update-layout child 0 0)
+    (sort @layout)))
 
 (defn- get-parent-tweets
   "return a sequence of the N highest-scoring tweets.  Tweet data is
@@ -823,6 +854,9 @@
 
   ;; genealogy
   (def rents (get-parent-tweets 5))
+  (def cur { :name "160215_233302_M.clj" :parents ["160215_073140_D.clj"] :hash -89036647 :image-hash 1882259542
+            :code (clisk.live/vsin (clisk.live/vdivide (clisk.live/adjust-hue [1.009 0.4101 -0.8179] (clisk.live/v- [0.502 2.7223 -1.2887] (clisk.live/v* clisk.live/pos clisk.live/pos))) (clisk.live/blue-from-hsl (clisk.live/vmod (clisk.live/adjust-hsl (clisk.live/vfrac (clisk.live/adjust-hsl (clisk.live/y [-2.2811 -1.7858 1.5606]) clisk.live/pos)) (clisk.live/alpha [-0.1433 1.4431 -2.088])) (clisk.live/green-from-hsl (clisk.live/x (clisk.live/adjust-hue (clisk.live/max-component 0.1601) (clisk.live/length clisk.live/pos))))))))
+            })
   (def data (read-gist-archive-data))
   (def parent-map (apply hash-map
                          (mapcat
@@ -830,6 +864,7 @@
                              [(:name v) (:parents v)])
                           data)))
   (defn get-by-name [name] (first (filter #(= name (:name %)) data)))
+
   (def cur (nth rents 0))
   (show (eval (:code cur)))
   (def cur (get-by-name (first (:parents cur))))
@@ -839,6 +874,21 @@
 
   ;; Facebook update helpers
   (print-top-n get-last-weeks-statuses 5)
+
+  ;; geneaology
+  (def layout (layout-generations "160208_193216_C.clj" parent-map))
+  ;; render tiles
+  (render-statuses (sort (distinct (map #(nth % 3) layout))) 64)
+  ;; print for use in ipython to create the final image
+  (map #(println (apply format "[%d, %d, %d, '%s']," %)) layout)
+
+  ;; rate limit issue?
+  (-> (tw/application-rate-limit-status :oauth-creds @my-twitter-creds)
+      :body
+      :resources
+      :statuses
+      :/statuses/user_timeline)
+  ;; {:limit 180, :remaining 180, :reset 1455205245}
 
   ) ;; comment
 
