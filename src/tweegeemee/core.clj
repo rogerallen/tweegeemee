@@ -34,6 +34,7 @@
   (reset! my-gist-auth       (env :gist-auth))
   (reset! my-gist-archive-id (env :gist-archive-id))
   (when-let [seed (env :clisk-random-seed)]
+    (println "clisk-random-seed" seed)
     (clisk.patterns/seed-perlin-noise! seed)
     (clisk.patterns/seed-simplex-noise! seed))
   nil)
