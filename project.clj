@@ -1,4 +1,4 @@
-(defproject tweegeemee "1.3.4"
+(defproject tweegeemee "1.3.5"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
