@@ -75,15 +75,14 @@ First, click that tweet's link to go to the github gist data structure.  For exa
  }
 ```
 
-Second, copy the info after the :code keyword to the end of the line.  e.g. `(clisk.live/vdivide ... )``
+Second, copy the info after the :code keyword to the end of the line.  e.g. `(clisk.live/vdivide ... )`
 
 Next, load up a repl and paste the clipboard contents in to define a variable `code` after a (important!) single quote like so:
 
 ```clj
-tweegeemee.core=> (def code '(clisk.live/vdivide (clisk.live/vfrac (clisk.live/vmin (clisk.live/v+ (clisk.live/alpha clisk.live/grain) [-0.9438 0.4027 2.3753 1.7962]) (clisk.live/sigmoid (clisk.live/vfloor [0.4416 -2.6627 -1.6566])))) (clisk.live/gradient (clisk.live/square (clisk.live/v- [-0.2226 -2.2105 -2.7124 -1.7799] clisk.live/vsnoise))))
- )
-
-tweegeemee.core=> (show (eval code) :width 720 :height 720)
+=> (def code '(clisk.live/vdivide (clisk.live/vfrac (clisk.live/vmin (clisk.live/v+ (clisk.live/alpha clisk.live/grain) [-0.9438 0.4027 2.3753 1.7962]) (clisk.live/sigmoid (clisk.live/vfloor [0.4416 -2.6627 -1.6566])))) (clisk.live/gradient (clisk.live/square (clisk.live/v- [-0.2226 -2.2105 -2.7124 -1.7799] clisk.live/vsnoise))))
+   )
+=> (show (eval code) :width 720 :height 720)
 ```
 
 To save an image, do
