@@ -88,7 +88,7 @@ Next, load up a repl and paste the clipboard contents in to define a variable `c
 To save an image, do
 
 ```clj
-(write-png "nice_one.png" (image (eval (:code d)) :width 720 :height 720))
+(write-png "nice_one.png" (image (eval code) :width 720 :height 720))
 ```
 
 ## License
