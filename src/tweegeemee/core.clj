@@ -293,7 +293,7 @@
   "return a vector of :hash and :image-hash data from the gist
   archive."
   []
-  (let [data (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)
+  (let [data (gists/read-archive my-gist-auth my-gist-archive-id)
         old-hashes (set (map :hash data))
         old-image-hashes (set (map :image-hash data))]
     [old-hashes old-image-hashes]))
@@ -405,10 +405,10 @@
 (defn- render-a-months-statuses
   [year month]
   (let [statuses (twitter/get-a-months-statuses year month)
-        data     (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)] ;; FIXME take archive name
+        data     (gists/read-archive my-gist-auth my-gist-archive-id)] ;; FIXME take archive name
     (doseq [s statuses]
       (let [name         (clojure.string/replace (:text s) #" http.*" "")
-            my-code      (:code (gists/get-gist-status-by-name data name))
+            my-code      (:code (gists/get-entry-by-name data name))
             _            (println name "::" my-code)
             my-image     (image (eval my-code) :size 32)
             png-filename (str "images/mosaic/" name ".png")]
@@ -416,9 +416,9 @@
 
 (defn- render-statuses
   [names size]
-  (let [data (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)] ;; FIXME take archive name
+  (let [data (gists/read-archive my-gist-auth my-gist-archive-id)] ;; FIXME take archive name
     (doseq [name names]
-      (let [my-code      (:code (gists/get-gist-status-by-name data name))
+      (let [my-code      (:code (gists/get-entry-by-name data name))
             _            (println name "::" my-code)
             my-image     (image (eval my-code) :size size)
             png-filename (str "images/tiles/" name ".png")]
@@ -470,7 +470,7 @@
   "return a sequence of the N highest-scoring tweets.  Tweet data is
   from the gist file."
   [N]
-  (let [archive  (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)
+  (let [archive  (gists/read-archive my-gist-auth my-gist-archive-id)
         statuses (->> (twitter/get-statuses my-twitter-creds my-screen-name NUM-PARENT-TWEETS)
                       (map #(update-in % [:text] clojure.string/replace #" http.*" ""))
                       (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
@@ -541,8 +541,8 @@
   png-filename & a pointer to twitter."
   [the-code clj-filename png-filename parent-vec]
   (let [image-hash       (image-hash (image (eval the-code) :size TEST-IMAGE-SIZE))
-        gist-line-number (gists/append-to-gist my-gist-archive-id my-gist-auth clj-filename the-code parent-vec image-hash)
-        gist-url         (gists/get-gist-url my-gist-archive-id gist-line-number)
+        gist-line-number (gists/append-archive my-gist-auth my-gist-archive-id clj-filename the-code parent-vec image-hash)
+        gist-url         (gists/get-url my-gist-archive-id gist-line-number)
         status-text      (str clj-filename " " gist-url
                               " #ProceduralArt #generative")]
   (twitter/post-to-twitter my-twitter-creds status-text png-filename)))
@@ -637,7 +637,7 @@
       (show (eval c))))
 
   ;; Look at the frequency of instructions
-  (def archive (gists/read-gist-archive-data my-gist-archive-id my-gist-auth))
+  (def archive (gists/read-archive my-gist-auth my-gist-archive-id))
   (defn get-fns [s]
     (filter #(not= % "")
             (-> (clojure.string/replace s #"clisk.live/|\(|\)|\[|\]|\.|[0-9]" "")
@@ -673,7 +673,7 @@
   (def cur { :name "160215_233302_M.clj" :parents ["160215_073140_D.clj"] :hash -89036647 :image-hash 1882259542
             :code (clisk.live/vsin (clisk.live/vdivide (clisk.live/adjust-hue [1.009 0.4101 -0.8179] (clisk.live/v- [0.502 2.7223 -1.2887] (clisk.live/v* clisk.live/pos clisk.live/pos))) (clisk.live/blue-from-hsl (clisk.live/vmod (clisk.live/adjust-hsl (clisk.live/vfrac (clisk.live/adjust-hsl (clisk.live/y [-2.2811 -1.7858 1.5606]) clisk.live/pos)) (clisk.live/alpha [-0.1433 1.4431 -2.088])) (clisk.live/green-from-hsl (clisk.live/x (clisk.live/adjust-hue (clisk.live/max-component 0.1601) (clisk.live/length clisk.live/pos))))))))
             })
-  (def data (gists/read-gist-archive-data my-gist-archive-id my-gist-auth))
+  (def data (gists/read-archive my-gist-auth my-gist-archive-id))
   (def parent-map (apply hash-map
                          (mapcat
                           #(let [v (select-keys % [:name :parents])]

@@ -1,54 +1,50 @@
 (ns tweegeemee.gists
   (:require
-   [clojure.edn        :as edn]
+   [clojure.edn     :as edn]
    [tentacles.gists :as gists]))
 
-(def     DEBUG-NO-POSTING      false) ;; set true when you don't want to post
-(defonce GIST-ARCHIVE-FILENAME "1_archive.edn")
+;; ======================================================================
+(def     DEBUG-NO-POSTING false) ;; set true when you don't want to post
+(defonce ARCHIVE-FILENAME "1_archive.edn")
 
+;; ======================================================================
 (defn- sanitize-filename
   [url]
   (clojure.string/replace url "." "-"))
 
-(defn- write-str-to-gist-archive
-  "write data-str to the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id.  Throws an exception on failure."
-  [my-gist-archive-id my-gist-auth data-str]
+(defn- write-str-to-archive
+  "write data-str to the ARCHIVE-FILENAME within the
+  @archive-id.  Throws an exception on failure."
+  [auth archive-id data-str]
   (let [resp (gists/edit-gist
-              @my-gist-archive-id
-              {:auth @my-gist-auth
-               :files { GIST-ARCHIVE-FILENAME { :content data-str }}})]
+              @archive-id
+              {:auth @auth
+               :files { ARCHIVE-FILENAME { :content data-str }}})]
     (if (nil? (:status resp))
       resp
       (throw (Exception. (str "gist error" (:message (:body resp))))))))
 
-(defn- read-str-from-gist-archive
-  "return str from the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id.  Throws an exception on failure."
-  [my-gist-archive-id my-gist-auth]
+(defn- read-str-from-archive
+  "return str from the ARCHIVE-FILENAME within the
+  @archive-id.  Throws an exception on failure."
+  [auth archive-id]
   (let [resp (try
-               (gists/specific-gist @my-gist-archive-id {:auth @my-gist-auth})
+               (gists/specific-gist @archive-id {:auth @auth})
                (catch Exception e
                  (println "gist read exception: " (.getMessage e))
                  [] ;; return empty response
                  ))]
     (if (nil? (:status resp))
       (if (-> (:files resp)
-              ((keyword GIST-ARCHIVE-FILENAME))
+              ((keyword ARCHIVE-FILENAME))
               :truncated)
         (throw (Exception. (str "truncated gist error")))
         (-> (:files resp)
-            ((keyword GIST-ARCHIVE-FILENAME))
+            ((keyword ARCHIVE-FILENAME))
             :content))
       (throw (Exception. (str "gist error" (:message (:body resp))))))))
 
-(defn read-gist-archive-data
-  "parse edn-formatted data from the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id."
-  [my-gist-archive-id my-gist-auth]
-  (edn/read-string (read-str-from-gist-archive my-gist-archive-id my-gist-auth)))
-
-(defn- gist-print-data
+(defn- format-archive
   "take array of dicts and return as str.  dicts better be formatted
   as I expect."
   [data]
@@ -60,29 +56,38 @@
        "]\n"
        ))
 
-(defn- update-gist-archive-data
-  "append new-data dict data to the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id. Return the line number for the new-data entry
+(declare read-archive)
+(defn- update-archive
+  "append new-data dict data to the ARCHIVE-FILENAME within the
+  @archive-id. Return the line number for the new-data entry
   in the file."
-  [my-gist-archive-id my-gist-auth new-data]
-  (let [old-archive-data (read-gist-archive-data my-gist-archive-id my-gist-auth)
+  [auth archive-id new-data]
+  (let [old-archive-data (read-archive auth archive-id)
         new-archive-data (conj old-archive-data new-data)
         line-number      (+ 2 (* 3 (dec (count new-archive-data))))
-        new-archive-str  (gist-print-data new-archive-data)]
-    (write-str-to-gist-archive my-gist-archive-id my-gist-auth new-archive-str)
+        new-archive-str  (format-archive new-archive-data)]
+    (write-str-to-archive auth archive-id new-archive-str)
     line-number))
 
-(defn append-to-gist
+;; ======================================================================
+;; public api
+(defn read-archive
+  "parse edn-formatted data from the ARCHIVE-FILENAME within the
+  @archive-id."
+  [auth archive-id]
+  (edn/read-string (read-str-from-archive auth archive-id)))
+
+(defn append-archive
   "Generate data dict from filename & code to append to the
-  GIST-ARCHIVE-FILENAME within the @my-gist-archive-id. Return the
+  ARCHIVE-FILENAME within the @archive-id. Return the
   line number for the new-data entry in the file."
-  [my-gist-archive-id my-gist-auth filename code parent-vec image-hash]
+  [auth archive-id filename code parent-vec image-hash]
   (if DEBUG-NO-POSTING
     (do
-      (println "DEBUG: NOT APPENDING CODE TO GIST")
+      (println "DEBUG: NOT APPENDING CODE TO GIST ARCHIVE")
       0)
-    (update-gist-archive-data
-     my-gist-archive-id my-gist-auth
+    (update-archive
+     auth archive-id
      {:name       filename
       :hash       (hash code)
       :image-hash image-hash
@@ -90,13 +95,13 @@
       :parents    parent-vec
       })))
 
-(defn get-gist-status-by-name
+(defn get-entry-by-name
   [data name]
   (first (filter #(= name (:name %)) data)))
 
-(defn get-gist-url
-  [my-gist-archive-id gist-line-number]
+(defn get-url
+  [archive-id gist-line-number]
    (str "https://gist.github.com/rogerallen/"
-        @my-gist-archive-id
-        "#file-" (sanitize-filename GIST-ARCHIVE-FILENAME)
+        @archive-id
+        "#file-" (sanitize-filename ARCHIVE-FILENAME)
         "-L" gist-line-number "-L" (+ 2 gist-line-number)))
