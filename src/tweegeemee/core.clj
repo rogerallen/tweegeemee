@@ -2,23 +2,33 @@
   (:use [clisk live])
   (:require
    [tweegeemee.twitter :as twitter]
+   [tweegeemee.gists   :as gists]
    [environ.core       :refer [env]]
    [clojure.zip        :as zip]
    [clojure.set        :as set]
-   [clojure.edn        :as edn]
    [clojure.java.io    :as io]
-   [tentacles.gists    :as gists]
    )
   (:import [java.io File]
            [javax.imageio ImageIO])
   (:gen-class))
 
 ;; ======================================================================
-;; add these keys to your profiles.clj (AND DON'T CHECK THAT FILE IN!)
 (defonce my-twitter-creds   (atom nil)) ;; oauth from api.twitter.com
 (defonce my-screen-name     (atom nil)) ;; twitter screen name
 (defonce my-gist-auth       (atom nil)) ;; gist username:password
 (defonce my-gist-archive-id (atom nil)) ;; create this archive
+;; add these keys to your environment or profiles.clj (AND DON'T CHECK THAT FILE IN!)
+;; # twitter stuff:
+;; export APP_CONSUMER_KEY="FIXME"
+;; export APP_CONSUMER_SECRET="FIXME"
+;; export USER_ACCESS_TOKEN="FIXME"
+;; export USER_ACCESS_SECRET="FIXME"
+;; export SCREEN_NAME="FIXME"
+;; # github gist stuff:
+;; export GIST_AUTH="FIXME"
+;; export GIST_ARCHIVE_ID="FIXME"
+;; # just pick a random integer
+;; export CLISK_RANDOM_SEED="FIXME"
 (defn setup-env!
   "setup environment vars"
   []
@@ -37,7 +47,6 @@
   nil)
 
 ;; ======================================================================
-(def     DEBUG-NO-POSTING          false) ;; set true when you don't want to post
 (defonce MAX-ALL-COMPONENT-VALUE   220)   ;; not too white
 (defonce MIN-ALL-COMPONENT-VALUE   36)    ;; not too dark
 (defonce MIN-ALL-COMPONENT-DELTA   10)    ;; not too similar
@@ -45,7 +54,6 @@
 (defonce TEST-IMAGE-SIZE           16)    ;; size for boring & img-hash check
 (defonce IMAGE-SIZE                720)   ;; size to post
 (defonce MAX-RANDOM-CODE-DEPTH     10)    ;; emperically got to this...
-(defonce GIST-ARCHIVE-FILENAME     "1_archive.edn")
 (defonce NUM-PARENT-TWEETS         200)   ;; 24 posts/day * 2 imgs = 48 img/day = ~4 days
 (defonce MAX-POSSIBLE-PARENTS      5)     ;; top 5 tweets become parents
 (defonce MAX-GOOD-CODE-ATTEMPTS    200)   ;; don't want to give up too quickly
@@ -78,88 +86,6 @@
                   `adjust-hue `adjust-hsl `vconcat})
 (def ternary-fns #{`lerp `clamp})
 (def fns (set/union unary-fns binary-fns ternary-fns))
-
-;; ======================================================================
-;; gist stuff
-(declare image-hash)
-(defn- write-str-to-gist-archive
-  "write data-str to the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id.  Throws an exception on failure."
-  [data-str]
-  (let [resp (gists/edit-gist
-              @my-gist-archive-id
-              {:auth @my-gist-auth
-               :files { GIST-ARCHIVE-FILENAME { :content data-str }}})]
-    (if (nil? (:status resp))
-      resp
-      (throw (Exception. (str "gist error" (:message (:body resp))))))))
-
-(defn- read-str-from-gist-archive
-  "return str from the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id.  Throws an exception on failure."
-  []
-  (let [resp (try
-               (gists/specific-gist @my-gist-archive-id {:auth @my-gist-auth})
-               (catch Exception e
-                 (println "gist read exception: " (.getMessage e))
-                 [] ;; return empty response
-                 ))]
-    (if (nil? (:status resp))
-      (if (-> (:files resp)
-              ((keyword GIST-ARCHIVE-FILENAME))
-              :truncated)
-        (throw (Exception. (str "truncated gist error")))
-        (-> (:files resp)
-            ((keyword GIST-ARCHIVE-FILENAME))
-            :content))
-      (throw (Exception. (str "gist error" (:message (:body resp))))))))
-
-(defn- read-gist-archive-data
-  "parse edn-formatted data from the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id."
-  []
-  (edn/read-string (read-str-from-gist-archive)))
-
-(defn- gist-print-data
-  "take array of dicts and return as str.  dicts better be formatted
-  as I expect."
-  [data]
-  (str "[\n"
-       (reduce (fn [a b]
-                 (format "%s { :name \"%s\" :parents %s :hash %d :image-hash %d\n   :code %s\n }\n"
-                         a (:name b) (:parents b) (:hash b) (:image-hash b) (:code b)))
-               "" data)
-       "]\n"
-       ))
-
-(defn- update-gist-archive-data
-  "append new-data dict data to the GIST-ARCHIVE-FILENAME within the
-  @my-gist-archive-id. Return the line number for the new-data entry
-  in the file."
-  [new-data]
-  (let [old-archive-data (read-gist-archive-data)
-        new-archive-data (conj old-archive-data new-data)
-        line-number      (+ 2 (* 3 (dec (count new-archive-data))))
-        new-archive-str  (gist-print-data new-archive-data)]
-    (write-str-to-gist-archive new-archive-str)
-    line-number))
-
-(defn- append-to-gist
-  "Generate data dict from filename & code to append to the
-  GIST-ARCHIVE-FILENAME within the @my-gist-archive-id. Return the
-  line number for the new-data entry in the file."
-  [filename code parent-vec]
-  (if DEBUG-NO-POSTING
-    (do
-      (println "DEBUG: NOT APPENDING CODE TO GIST")
-      0)
-    (update-gist-archive-data
-     {:name       filename
-      :hash       (hash code)
-      :image-hash (image-hash (image (eval code) :size TEST-IMAGE-SIZE))
-      :code       (pr-str code)
-      :parents    parent-vec
-      })))
 
 ;; ======================================================================
 (defn- random-fn
@@ -367,7 +293,7 @@
   "return a vector of :hash and :image-hash data from the gist
   archive."
   []
-  (let [data (read-gist-archive-data)
+  (let [data (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)
         old-hashes (set (map :hash data))
         old-image-hashes (set (map :image-hash data))]
     [old-hashes old-image-hashes]))
@@ -452,10 +378,6 @@
   [timestamp suffix]
   (str timestamp "_" suffix ".clj"))
 
-(defn sanitize-filename
-  [url]
-  (clojure.string/replace url "." "-"))
-
 (defn- score-status
   "return a score for a image's tweet based on favorites and
   retweets. retweets count more than favorites"
@@ -478,19 +400,15 @@
 ;; 3) album: ancestry of last week's post (or a post people talk about)
 ;; ======================================================================
 
-(defn- get-gist-status-by-name
-  [data name]
-  (first (filter #(= name (:name %)) data)))
-
 ;; Postprocess with e.g.:
 ;;   montage -tile 48x30 -geometry 32x32 1512*png a.png
 (defn- render-a-months-statuses
   [year month]
   (let [statuses (twitter/get-a-months-statuses year month)
-        data     (read-gist-archive-data)] ;; FIXME take archive name
+        data     (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)] ;; FIXME take archive name
     (doseq [s statuses]
       (let [name         (clojure.string/replace (:text s) #" http.*" "")
-            my-code      (:code (get-gist-status-by-name data name))
+            my-code      (:code (gists/get-gist-status-by-name data name))
             _            (println name "::" my-code)
             my-image     (image (eval my-code) :size 32)
             png-filename (str "images/mosaic/" name ".png")]
@@ -498,9 +416,9 @@
 
 (defn- render-statuses
   [names size]
-  (let [data (read-gist-archive-data)] ;; FIXME take archive name
+  (let [data (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)] ;; FIXME take archive name
     (doseq [name names]
-      (let [my-code      (:code (get-gist-status-by-name data name))
+      (let [my-code      (:code (gists/get-gist-status-by-name data name))
             _            (println name "::" my-code)
             my-image     (image (eval my-code) :size size)
             png-filename (str "images/tiles/" name ".png")]
@@ -552,7 +470,7 @@
   "return a sequence of the N highest-scoring tweets.  Tweet data is
   from the gist file."
   [N]
-  (let [archive  (read-gist-archive-data)
+  (let [archive  (gists/read-gist-archive-data my-gist-archive-id my-gist-auth)
         statuses (->> (twitter/get-statuses my-twitter-creds my-screen-name NUM-PARENT-TWEETS)
                       (map #(update-in % [:text] clojure.string/replace #" http.*" ""))
                       (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
@@ -622,12 +540,11 @@
   "Post the-code + clj-filename info to gist.github.com, post
   png-filename & a pointer to twitter."
   [the-code clj-filename png-filename parent-vec]
-  (let [gist-line-number (append-to-gist clj-filename the-code parent-vec)
-        gist-url         (str "https://gist.github.com/rogerallen/"
-                              @my-gist-archive-id
-                              "#file-" (sanitize-filename GIST-ARCHIVE-FILENAME)
-                              "-L" gist-line-number "-L" (+ 2 gist-line-number))
-        status-text (str clj-filename " " gist-url " #ProceduralArt #generative")]
+  (let [image-hash       (image-hash (image (eval the-code) :size TEST-IMAGE-SIZE))
+        gist-line-number (gists/append-to-gist my-gist-archive-id my-gist-auth clj-filename the-code parent-vec image-hash)
+        gist-url         (gists/get-gist-url my-gist-archive-id gist-line-number)
+        status-text      (str clj-filename " " gist-url
+                              " #ProceduralArt #generative")]
   (twitter/post-to-twitter my-twitter-creds status-text png-filename)))
 
 (defn post-batch-to-web*
@@ -720,7 +637,7 @@
       (show (eval c))))
 
   ;; Look at the frequency of instructions
-  (def archive (read-gist-archive-data))
+  (def archive (gists/read-gist-archive-data my-gist-archive-id my-gist-auth))
   (defn get-fns [s]
     (filter #(not= % "")
             (-> (clojure.string/replace s #"clisk.live/|\(|\)|\[|\]|\.|[0-9]" "")
@@ -756,7 +673,7 @@
   (def cur { :name "160215_233302_M.clj" :parents ["160215_073140_D.clj"] :hash -89036647 :image-hash 1882259542
             :code (clisk.live/vsin (clisk.live/vdivide (clisk.live/adjust-hue [1.009 0.4101 -0.8179] (clisk.live/v- [0.502 2.7223 -1.2887] (clisk.live/v* clisk.live/pos clisk.live/pos))) (clisk.live/blue-from-hsl (clisk.live/vmod (clisk.live/adjust-hsl (clisk.live/vfrac (clisk.live/adjust-hsl (clisk.live/y [-2.2811 -1.7858 1.5606]) clisk.live/pos)) (clisk.live/alpha [-0.1433 1.4431 -2.088])) (clisk.live/green-from-hsl (clisk.live/x (clisk.live/adjust-hue (clisk.live/max-component 0.1601) (clisk.live/length clisk.live/pos))))))))
             })
-  (def data (read-gist-archive-data))
+  (def data (gists/read-gist-archive-data my-gist-archive-id my-gist-auth))
   (def parent-map (apply hash-map
                          (mapcat
                           #(let [v (select-keys % [:name :parents])]
