@@ -49,10 +49,10 @@
          :body [(tw-req/file-body-part the-image-filename)
                 (tw-req/status-body-part status-text)])
         (catch Exception e
-          ;; FIXME -- why does this always have a remote-closed exception?
-          (println "caught expected? twitter exception" (.getMessage e))))
-      (println "waiting for a 5 seconds...")
-      (Thread/sleep 5000))))
+          (println "caught twitter exception" (.getMessage e))))
+      ;;(println "waiting for 5 seconds...")
+      ;;(Thread/sleep 5000)
+      )))
 
 (defn- get-tgm-statuses
   ([my-twitter-creds my-screen-name N]
@@ -119,3 +119,10 @@
                          :params {:count count
                                   :screen-name @my-screen-name}))]
     statuses))
+
+(defn post-status
+  [my-twitter-creds status-str]
+  (try (tw/statuses-update
+        :oauth-creds @my-twitter-creds
+        :params {:status status-str})
+       (catch Exception e (println "Oh no! " (.getMessage e)))))
