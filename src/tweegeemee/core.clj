@@ -545,7 +545,7 @@
         gist-url         (gists/get-url my-gist-archive-id gist-line-number)
         status-text      (str clj-filename " " gist-url
                               " #ProceduralArt #generative")]
-  (twitter/post-to-twitter my-twitter-creds status-text png-filename)))
+  (twitter/post-image-file my-twitter-creds status-text png-filename)))
 
 (defn post-batch-to-web*
   "Post a batch of random codes & images to twitter and github."
