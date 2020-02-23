@@ -11,30 +11,38 @@
 (def DEBUG-NO-POSTING  false) ;; set true when you don't want to post
 
 ;; ======================================================================
-(defn- get-statuses
-  ([oauth-creds screen-name N]
+(def MAX-GET-STATUS-COUNT 200) ; per twitter doc
+(defn get-statuses
+  ([oauth-creds screen-name count]
+   "return count statuses on screen-name's user timeline"
    (:body (tw/statuses-user-timeline
            :oauth-creds @oauth-creds
-           :params {:count N
+           :params {:count count
                     :screen-name @screen-name})))
-  ([oauth-creds screen-name N max-id]
+  ([oauth-creds screen-name count max-id]
+   "return count statuses on screen-name's user timeline, prior to the max-id status"
    (:body (tw/statuses-user-timeline
            :oauth-creds @oauth-creds
-           :params {:count N
+           :params {:count count
                     :screen-name @screen-name
                     :max-id max-id}))))
 
-(defn- get-statuses-until-regex
+(defn get-statuses-until-regex
   [oauth-creds screen-name regex]
-  (loop [new-statuses (get-statuses oauth-creds screen-name 200)
+  "gets statuses until a regex matches, but does NOT include that regex-matching status."
+  (loop [new-statuses (get-statuses oauth-creds screen-name MAX-GET-STATUS-COUNT)
          old-statuses '()]
-    (let [statuses (concat old-statuses new-statuses)
-          last-id (:id (last statuses))
-          statuses-until-regex (take-while #(not (re-matches regex (:text %))) statuses)]
-      ;;(println "n=" (count statuses) "nn=" (count statuses-until-regex) "id=" last-id)
-      (if (< (count statuses-until-regex) (count statuses))
+    (let [statuses                (concat old-statuses new-statuses)
+          last-id                 (:id (last statuses))
+          statuses-until-regex    (take-while #(not (re-matches regex (:text %))) statuses)
+          more-statuses-available (= (count new-statuses) MAX-GET-STATUS-COUNT)
+          regex-found             (< (count statuses-until-regex) (count statuses))]
+      ;;(println "ns=" (count new-statuses) "os=" (count old-statuses)
+      ;;         "s=" (count statuses) "sr=" (count statuses-until-regex)
+      ;;         "id=" last-id)
+      (if (or regex-found (not more-statuses-available))
         statuses-until-regex
-        (recur (get-statuses oauth-creds screen-name 200 last-id) statuses)))))
+        (recur (get-statuses oauth-creds screen-name MAX-GET-STATUS-COUNT last-id) statuses)))))
 
 ;; ======================================================================
 ;; http://www.rkn.io/2014/02/13/clojure-cookbook-date-ranges/
@@ -80,8 +88,9 @@
         statuses (get-statuses-until-regex oauth-creds screen-name regex-old)
         ;;_ (println "n1=" (count statuses))
         statuses (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj .*" (:text %)) statuses)
-        statuses (drop-while #(not (re-matches regex-new (:text %))) statuses)
         ;;_ (println "n2=" (count statuses))
+        statuses (drop-while #(not (re-matches regex-new (:text %))) statuses)
+        ;;_ (println "n3=" (count statuses))
         ]
     statuses))
 
@@ -98,14 +107,6 @@
         statuses (drop-while #(not (re-matches regex-new (:text %))) statuses)]
     statuses))
 
-(defn get-statuses
-  [oauth-creds screen-name count]
-  (let [statuses (:body (tw/statuses-user-timeline
-                         :oauth-creds @oauth-creds
-                         :params {:count count
-                                  :screen-name @screen-name}))]
-    statuses))
-
 ;; main workhorse
 (defn post-image-file
   "post status-text and image to twitter"
@@ -119,10 +120,27 @@
          :body [(tw-req/file-body-part image-filename)
                 (tw-req/status-body-part status-text)])
         (catch Exception e
-          (println "caught twitter exception" (.getMessage e))))
-      ;;(println "waiting for 5 seconds...")
-      ;;(Thread/sleep 5000)
-      )))
+          (println "caught twitter exception" (.getMessage e)))))))
+
+(comment
+  ;;!!! NEED TO WAIT FOR TWITTER-API version bump to higher than 1.8.0
+  (defn post-image-file2
+    [oauth-creds status-text image-filename]
+    (if DEBUG-NO-POSTING
+      (println "DEBUG: NOT POSTING TO TWITTER" status-text)
+      (do (try
+            (let [media-id (-> (tw/media-upload-chunked :oauth-creds oauth-creds
+                                                        :media       image-filename
+                                                        :media-type  "image/png")
+                               :body
+                               :media_id)
+                  _ (println "media-id = " media-id)]
+              (tw/statuses-update :oauth-creds oauth-creds
+                                  :params {:status status-text
+                                           :media-ids [media-id]}))
+            (catch Exception e
+              (println "caught twitter exception" (.getMessage e)))))))
+  )
 
 ;; simple post, mainly for testing
 (defn post-status
