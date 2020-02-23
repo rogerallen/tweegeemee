@@ -1,6 +1,7 @@
 (ns tweegeemee.gists
   (:require
    [clojure.edn     :as edn]
+   [clojure.string]
    [tentacles.gists :as gists]))
 
 ;; ======================================================================

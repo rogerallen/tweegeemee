@@ -1,11 +1,14 @@
 (ns tweegeemee.core
   (:use [clisk live])
   (:require
+   ;;[clisk.live] tried this, but caused issues
+   [clisk.patterns]
    [tweegeemee.twitter :as twitter]
    [tweegeemee.gists   :as gists]
    [environ.core       :refer [env]]
    [clojure.zip        :as zip]
    [clojure.set        :as set]
+   [clojure.string]
    [clojure.java.io    :as io])
   (:import [java.io File]
            [javax.imageio ImageIO])
@@ -320,7 +323,7 @@
                     (throw (Exception. "previously created code")))
                 _ (when-not (good-random-code? cur-code)
                     (throw (Exception. "badly created code")))
-                img (image (eval cur-code) :size TEST-IMAGE-SIZE)
+                img (clisk.live/image (eval cur-code) :size TEST-IMAGE-SIZE)
                 _ (when-not (nil? (old-image-hashes (image-hash img)))
                     (throw (Exception. "previously created image")))
                 _ (when-not (good-image? img)
@@ -331,10 +334,14 @@
             (reset! good-code cur-code))
           (catch Exception e
             ;;(println @cur-count "Exception" (.getMessage e))
+            ;; intentionally NOT printing the exception e, we are
+            ;; merely noting this as we attempt to generate good code
             (print "e")
             )
           (catch java.util.concurrent.ExecutionException e
             ;;(println @cur-count "execution exception")
+            ;; intentionally NOT printing the exception e, we are
+            ;; merely noting this as we attempt to generate good code
             (print "E")
             )))
       @good-code)
@@ -405,13 +412,13 @@
 ;;   montage -tile 48x30 -geometry 32x32 1512*png a.png
 (defn- render-a-months-statuses
   [year month]
-  (let [statuses (twitter/get-a-months-statuses year month)
+  (let [statuses (twitter/get-a-months-statuses my-twitter-creds my-screen-name year month)
         data     (gists/read-archive my-gist-auth my-gist-archive-id)] ;; FIXME take archive name
     (doseq [s statuses]
       (let [name         (clojure.string/replace (:text s) #" http.*" "")
             my-code      (:code (gists/get-entry-by-name data name))
             _            (println name "::" my-code)
-            my-image     (image (eval my-code) :size 32)
+            my-image     (clisk.live/image (eval my-code) :size 32)
             png-filename (str "images/mosaic/" name ".png")]
         (write-png png-filename my-image)))))
 
@@ -421,7 +428,7 @@
     (doseq [name names]
       (let [my-code      (:code (gists/get-entry-by-name data name))
             _            (println name "::" my-code)
-            my-image     (image (eval my-code) :size size)
+            my-image     (clisk.live/image (eval my-code) :size size)
             png-filename (str "images/tiles/" name ".png")]
         (write-png png-filename my-image)))))
 
@@ -447,24 +454,24 @@
 ;;(print-top-n get-last-weeks-statuses 3)
 
 ;; geneaology
-(defn- layout-generations
-  [child parent-map]
-  (let [layout (atom [])] ;; vector of vectors [x y num-parents name]
-    (defn update-layout
-      [child generation y]
-      (let [parents (parent-map child)
-            num-parents (count parents)]
-        ;;(println generation y (count parents) child)
-        ;; if I was smarter, maybe I'd be able to conj this below...
-        (swap! layout #(conj % [generation y num-parents child]))
+(defn- update-layout
+  [layout child parent-map generation y]
+  (let [parents (parent-map child)
+        num-parents (count parents)]
+    ;;(println generation y (count parents) child)
+    ;; if I was smarter, maybe I'd be able to conj this below...
+    (swap! layout #(conj % [generation y num-parents child]))
         (if (empty? parents)
           [(inc y) [generation y num-parents child]]
           (let [generation (inc generation)]
             (reduce #(do ;; (println "x" y %1 %2)
-                       (update-layout (first %2) generation (max (first %1) (+ y (second %2)))))
+                       (update-layout layout (first %2) parent-map generation (max (first %1) (+ y (second %2)))))
                     [y []]
                     (map vector parents (range num-parents)))))))
-    (update-layout child 0 0)
+(defn- layout-generations
+  [child parent-map]
+  (let [layout (atom [])] ;; vector of vectors [x y num-parents name]
+    (update-layout layout child parent-map 0 0)
     (sort @layout)))
 
 (defn get-parent-tweets
@@ -506,7 +513,7 @@
     (if (nil? my-code)
       [nil nil nil]
       (let [png-filename (get-png-filename timestamp suffix)
-            my-image     (image (eval my-code) :size IMAGE-SIZE)
+            my-image     (clisk.live/image (eval my-code) :size IMAGE-SIZE)
             clj-filename (get-clj-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
@@ -541,7 +548,7 @@
   "Post the-code + clj-filename info to gist.github.com, post
   png-filename & a pointer to twitter."
   [the-code clj-filename png-filename parent-vec]
-  (let [image-hash       (image-hash (image (eval the-code) :size TEST-IMAGE-SIZE))
+  (let [image-hash       (image-hash (clisk.live/image (eval the-code) :size TEST-IMAGE-SIZE))
         gist-line-number (gists/append-archive my-gist-auth my-gist-archive-id clj-filename the-code parent-vec image-hash)
         gist-url         (gists/get-url my-gist-archive-id gist-line-number)
         status-text      (str clj-filename " " gist-url
@@ -598,7 +605,8 @@
   (let [regex  (re-pattern (str "^" (:name entry)))
         status (first (filter #(re-find regex (:text %)) statuses))]
     (if (not (empty? status))
-      (:id_str status))))
+      (:id_str status)
+      nil)))
 
 (defn- add-id-to-entry
   "if necessary, try to find the twitter id for entry in statuses.  if
@@ -741,11 +749,11 @@
   (map #(println (apply format "[%d, %d, %d, '%s']," %)) layout)
 
   ;; rate limit issue?
-  (-> (tw/application-rate-limit-status :oauth-creds @my-twitter-creds)
-      :body
-      :resources
-      :statuses
-      :/statuses/user_timeline)
+  ;;(-> (tw/application-rate-limit-status :oauth-creds @my-twitter-creds)
+  ;;    :body
+  ;;    :resources
+  ;;    :statuses
+  ;;    :/statuses/user_timeline)
   ;; {:limit 180, :remaining 180, :reset 1455205245}
 
 
