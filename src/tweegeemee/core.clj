@@ -349,7 +349,7 @@
       (println "get-good-code* Setup Exception" (.getMessage e))
       nil)))
 
-(defn- get-random-code
+(defn get-random-code
   "get a good image-creation code created randomly"
   []
   (get-good-code* (fn [] (random-code MAX-RANDOM-CODE-DEPTH))))
@@ -422,7 +422,7 @@
             png-filename (str "images/mosaic/" name ".png")]
         (write-png png-filename my-image)))))
 
-(defn- render-statuses
+(defn render-statuses
   [names size]
   (let [data (gists/read-archive my-gist-auth my-gist-archive-id)] ;; FIXME take archive name
     (doseq [name names]
@@ -468,7 +468,7 @@
                        (update-layout layout (first %2) parent-map generation (max (first %1) (+ y (second %2)))))
                     [y []]
                     (map vector parents (range num-parents)))))))
-(defn- layout-generations
+(defn layout-generations
   [child parent-map]
   (let [layout (atom [])] ;; vector of vectors [x y num-parents name]
     (update-layout layout child parent-map 0 0)
@@ -494,13 +494,13 @@
                       )]
     statuses))
 
-(defn- get-random-child
+(defn get-random-child
   "get a good image-creation code created via breeding two other
   codes"
   [code0 code1]
   (get-good-code* (fn [] (breed code0 code1))))
 
-(defn- get-random-mutant
+(defn get-random-mutant
   "get a good image-creation code created via mutating a code"
   [code]
   (get-good-code* (fn [] (mutate code))))
@@ -655,111 +655,3 @@
   (println "posting complete.")
   (shutdown-agents) ;; quit faster
   0) ;; return 0 status so we don't look like we crashed
-
-;; ======================================================================
-;; Example usage to explore at the repl
-;; ======================================================================
-(comment
-
-  ;; be sure to get this setup
-  (setup-env!)
-
-  ;; generate & show a random image
-  (let [c (get-random-code)]
-    (show (eval c)))
-
-  ;; breed images by hand...
-  (def rents (get-parent-tweets 5))
-  (def dad (:code (rand-nth rents)))
-  (def mom (:code (rand-nth rents)))
-  (show (eval dad))
-  (show (eval mom))
-  (let [c (get-random-child dad mom)]
-    (if (not (nil? c))
-      (show (eval c))))
-
-  ;; breed mutants by hand...
-  (def rents (get-parent-tweets 5))
-  (def dad (:code (rand-nth rents)))
-  (show (eval dad))
-  (let [c (get-random-mutant dad)]
-    (if (not (nil? c))
-      (show (eval c))))
-
-  ;; Look at the frequency of instructions
-  (def archive (gists/read-archive my-gist-auth my-gist-archive-id))
-  (defn get-fns [s]
-    (filter #(not= % "")
-            (-> (clojure.string/replace s #"clisk.live/|\(|\)|\[|\]|\.|[0-9]" "")
-                (clojure.string/replace #" -" "")
-                (clojure.string/split #" "))))
-  (println (sort-by val (frequencies (sort (mapcat #(get-fns (:code %)) archive)))))
-  (println (sort-by val (frequencies (sort (mapcat #(get-fns (:code %)) (drop 200 archive))))))
-
-  ;; ----------------------------------------------------------------------
-  ;; NOTE that code below this point posts to the web
-
-  ;; post a random image to the web
-  (let [[the-code clj-filename png-filename]
-        (make-random-code-and-png (get-timestamp-str) "s")]
-    (post-to-web the-code clj-filename png-filename))
-
-  ;; Careful!
-  (post-random-batch-to-web "r")
-
-  ;; Careful!
-  (post-children-to-web "ABCDE")
-
-  ;; Careful!
-  (post-mutants-to-web "VWXYZ")
-
-  (try (tw/statuses-update
-        :oauth-creds @my-twitter-creds
-        :params {:status "testing from home"})
-       (catch Exception e (println "Oh no! " (.getMessage e))))
-
-  ;; genealogy
-  (def rents (get-parent-tweets 5))
-  (def cur { :name "160215_233302_M.clj" :parents ["160215_073140_D.clj"] :hash -89036647 :image-hash 1882259542
-            :code (clisk.live/vsin (clisk.live/vdivide (clisk.live/adjust-hue [1.009 0.4101 -0.8179] (clisk.live/v- [0.502 2.7223 -1.2887] (clisk.live/v* clisk.live/pos clisk.live/pos))) (clisk.live/blue-from-hsl (clisk.live/vmod (clisk.live/adjust-hsl (clisk.live/vfrac (clisk.live/adjust-hsl (clisk.live/y [-2.2811 -1.7858 1.5606]) clisk.live/pos)) (clisk.live/alpha [-0.1433 1.4431 -2.088])) (clisk.live/green-from-hsl (clisk.live/x (clisk.live/adjust-hue (clisk.live/max-component 0.1601) (clisk.live/length clisk.live/pos))))))))
-            })
-  (def data (gists/read-archive my-gist-auth my-gist-archive-id))
-  (def parent-map (apply hash-map
-                         (mapcat
-                          #(let [v (select-keys % [:name :parents])]
-                             [(:name v) (:parents v)])
-                          data)))
-  (defn get-by-name [name] (first (filter #(= name (:name %)) data)))
-
-  (def cur (nth rents 0))
-  (show (eval (:code cur)))
-  (def cur (get-by-name (first (:parents cur))))
-  (def cur (get-by-name (second (:parents cur))))
-
-  (show (eval (:code (nth rents 1))) :width 900 :height 900)
-
-  ;; Facebook update helpers
-  (print-top-n get-last-weeks-statuses 5)
-
-  ;; geneaology
-  (def layout (layout-generations "160208_193216_C.clj" parent-map))
-  ;; render tiles
-  (render-statuses (sort (distinct (map #(nth % 3) layout))) 64)
-  ;; print for use in ipython to create the final image
-  (map #(println (apply format "[%d, %d, %d, '%s']," %)) layout)
-
-  ;; rate limit issue?
-  ;;(-> (tw/application-rate-limit-status :oauth-creds @my-twitter-creds)
-  ;;    :body
-  ;;    :resources
-  ;;    :statuses
-  ;;    :/statuses/user_timeline)
-  ;; {:limit 180, :remaining 180, :reset 1455205245}
-
-
-
-  ) ;; comment
-
-;; to reproduce the heroku environment, do:
-;;   lein with-profile production compile :all
-;;   lein trampoline run
