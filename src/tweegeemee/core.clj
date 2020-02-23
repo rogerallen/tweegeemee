@@ -642,6 +642,7 @@
     0 (post-random-batch-to-web "ab")
     1 (post-children-to-web "CD")
     2 (post-mutants-to-web "MN"))
+  (reconcile-gist-twitter-ids)
   (cleanup-our-files!)
   (println "posting complete.")
   (shutdown-agents) ;; quit faster
