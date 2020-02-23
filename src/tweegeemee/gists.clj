@@ -50,11 +50,17 @@
   [data]
   (str "[\n"
        (reduce (fn [a b]
-                 (format "%s { :name \"%s\" :parents %s :hash %d :image-hash %d\n   :code %s\n }\n"
-                         a (:name b) (:parents b) (:hash b) (:image-hash b) (:code b)))
+                 (format "%s { :name \"%s\" :parents %s :hash %d :image-hash %d%s\n   :code %s\n }\n"
+                         a (:name b)
+                         (:parents b)
+                         (:hash b)
+                         (:image-hash b)
+                         (if-let [twitter-id (:twitter-id b)]
+                           (format " :twitter-id %s" twitter-id)
+                           "")
+                         (:code b)))
                "" data)
-       "]\n"
-       ))
+       "]\n"))
 
 (declare read-archive)
 (defn- update-archive
@@ -76,6 +82,12 @@
   @archive-id."
   [auth archive-id]
   (edn/read-string (read-str-from-archive auth archive-id)))
+
+(defn write-archive
+  "overwrite ARCHIVE-FILENAME within the @archive-id with new-data"
+  [auth archive-id new-data]
+  (let [new-archive-str (format-archive new-data)]
+    (write-str-to-archive auth archive-id new-archive-str)))
 
 (defn append-archive
   "Generate data dict from filename & code to append to the

@@ -6,8 +6,7 @@
    [environ.core       :refer [env]]
    [clojure.zip        :as zip]
    [clojure.set        :as set]
-   [clojure.java.io    :as io]
-   )
+   [clojure.java.io    :as io])
   (:import [java.io File]
            [javax.imageio ImageIO])
   (:gen-class))
@@ -25,8 +24,8 @@
 ;; export USER_ACCESS_SECRET="FIXME"
 ;; export SCREEN_NAME="FIXME"
 ;; # github gist stuff:
-;; export GIST_AUTH="FIXME"
-;; export GIST_ARCHIVE_ID="FIXME"
+;; export GIST_AUTH="FIXME" (use personal access token)
+;; export GIST_ARCHIVE_ID="FIXME" (last part of URL)
 ;; # just pick a random integer
 ;; export CLISK_RANDOM_SEED="FIXME"
 (defn setup-env!
@@ -38,6 +37,7 @@
                               (env :user-access-token)
                               (env :user-access-secret)))
   (reset! my-screen-name     (env :screen-name))
+  (println "my-screen-name" @my-screen-name)
   (reset! my-gist-auth       (env :gist-auth))
   (reset! my-gist-archive-id (env :gist-archive-id))
   (when-let [seed (Integer/parseInt (env :clisk-random-seed))]
@@ -64,27 +64,28 @@
 
 ;; ======================================================================
 ;; Functions used in creating imagery.
-(declare random-value)
-(defn- random-scalar [] (random-value))
-(defn- random-vec2 [] [(random-value) (random-value)])
-(defn- random-vec3 [] [(random-value) (random-value) (random-value)])
-(defn- random-vec4 [] [(random-value) (random-value) (random-value) (random-value)])
+(declare random-float)
+(defn- random-scalar [] (random-float))
+(defn- random-vec2   [] [(random-float) (random-float)])
+(defn- random-vec3   [] [(random-float) (random-float) (random-float)])
+(defn- random-vec4   [] [(random-float) (random-float) (random-float) (random-float)])
 ;; use ` instead of ' in order to add the namespace so it can be found when eval'd
-(def term-vals #{`pos random-scalar random-vec2 random-vec3 random-vec4})
-(def term-fns #{`noise `snoise `plasma `splasma
-                `vnoise `vsnoise `vplasma `vsplasma
-                `grain `turbulence `vturbulence
-                `spots `blotches})
-(def unary-fns #{`vsin `vcos `vabs `vround `vfloor `vfrac
-                 `square `vsqrt `sigmoid `max-component `min-component
-                 `length `normalize `gradient
-                 `hue-from-rgb `lightness-from-rgb `saturation-from-rgb
-                 `hsl-from-rgb `red-from-hsl `green-from-hsl `blue-from-hsl
-                 `rgb-from-hsl `x `y `z `t `alpha })
-(def binary-fns #{`v+ `v* `v- `vdivide `vpow `vmod `dot `cross3
-                  `vmin `vmax `checker `scale `offset
-                  `adjust-hue `adjust-hsl `vconcat})
-(def ternary-fns #{`lerp `clamp})
+(def term-vals   #{`pos `TAU `PI random-scalar random-vec2 random-vec3 random-vec4})
+(def term-fns    #{`noise `snoise `plasma `splasma
+                   `vnoise `vsnoise `vplasma `vsplasma
+                   `grain `turbulence `vturbulence
+                   `spots `blotches `agate `clouds `velvet `flecks `wood})
+(def unary-fns   #{`vsin `vcos `vabs `vround `vfloor `vfrac
+                   `square `vsqrt `sigmoid `triangle-wave `max-component `min-component
+                   `length `normalize `gradient
+                   `theta `radius `polar `height `height-normal
+                   `hue-from-rgb `lightness-from-rgb `saturation-from-rgb
+                   `hsl-from-rgb `red-from-hsl `green-from-hsl `blue-from-hsl
+                   `rgb-from-hsl `x `y `z `t `alpha })
+(def binary-fns  #{`v+ `v* `v- `vdivide `vpow `vmod `dot `cross3
+                   `vmin `vmax `turbulate `checker `rotate `scale `offset
+                   `adjust-hue `adjust-hsl `vconcat `average})
+(def ternary-fns #{`lerp `clamp `vconcat `vif `average})
 (def fns (set/union unary-fns binary-fns ternary-fns))
 
 ;; ======================================================================
@@ -98,14 +99,14 @@
     1 (rand-nth (seq unary-fns))))
 ;;(random-fn 3)
 
-(defn- random-value
+(defn- random-float
   "return a random value in the range (-3,3) with only 4 significant
   digits to increase readability"
   []
   (let [x (* 3 (dec (rand 2)))
         x (/ (Math/floor (* x 10000)) 10000.0)]
     x))
-;;(random-value)
+;;(random-float)
 
 (defn- random-terminal
   "return a random terminal value: vectors, position, or noise."
@@ -196,11 +197,11 @@
       ;;* If the node is a scalar value, it can be adjusted by the
       ;;addition of some random amount.
       java.lang.Double
-      (+ node (random-value))
+      (+ node (random-float))
       ;;* If the node is a vector, it can be adjusted by adding random
       ;;amounts to each element.
       clojure.lang.PersistentVector
-      (vec (map #(+ % (random-value)) node))
+      (vec (map #(+ % (random-float)) node))
       ;;* If the node is a function, it can mutate into a different
       ;;function. For example (abs X) might become (cos X). If this
       ;;mutation occurs, the arguments of the function are also adjusted
@@ -587,6 +588,46 @@
     (post-batch-to-web* (partial make-random-mutant-and-png (:code c0) timestamp-str)
                         "mutant" suffix-str [(:name c0)])))
 
+;; fix https://github.com/rogerallen/tweegeemee/issues/14
+;; add twitter id to gist data
+(defn- find-twitter-id
+  "find this entry's :id_str (twitter-id) inside the statuses by matching
+  the :name of the entry to the start of the status :text.  if not found,
+  return nil."
+  [entry statuses]
+  (let [regex  (re-pattern (str "^" (:name entry)))
+        status (first (filter #(re-find regex (:text %)) statuses))]
+    (if (not (empty? status))
+      (:id_str status))))
+
+(defn- add-id-to-entry
+  "if necessary, try to find the twitter id for entry in statuses.  if
+  you cannot find the id, return unchanged."
+  [entry statuses]
+  (if (:twitter-id entry)
+    entry
+    (if-let [twitter-id (find-twitter-id entry statuses)]
+      (assoc entry :twitter-id twitter-id)
+      entry)))
+
+(defn- add-ids-to-entries
+  [entries statuses]
+  (map #(add-id-to-entry % statuses) entries))
+
+(defn reconcile-gist-twitter-ids
+  []
+  (loop [entries (gists/read-archive my-gist-auth my-gist-archive-id)
+         statuses (twitter/get-statuses my-twitter-creds my-screen-name twitter/MAX-GET-STATUS-COUNT)]
+    (let [entries            (add-ids-to-entries entries statuses)
+          entries-without-id (filter #(not (:twitter-id %)) entries)
+          last-id            (:id (last statuses))]
+      (if (or (= (count entries-without-id) 0)
+              (= (count statuses) 1))
+        ;; fixed all entries or ran out of statuses
+        ;;(println "WRITE ->" entries)
+        (gists/write-archive my-gist-auth my-gist-archive-id entries)
+        (recur entries (twitter/get-statuses my-twitter-creds my-screen-name twitter/MAX-GET-STATUS-COUNT last-id))))))
+
 (defn cur-hour
   "return the current hour"
   []
@@ -705,6 +746,8 @@
       :statuses
       :/statuses/user_timeline)
   ;; {:limit 180, :remaining 180, :reset 1455205245}
+
+
 
   ) ;; comment
 
