@@ -6,10 +6,81 @@
    [tweegeemee.gists   :as gists]))
 
 ;; ======================================================================
-;; code for interactively exploring tweegeemee possibilities
+;; ideas for facebook/tumbler/etc posts
+;; 1) last week's Top 3
+;; 2) monthly mosaic image.  30 days x 24 images/day (32x32px?)
+;; 3) album: ancestry of last week's post (or a post people talk about)
+;; ======================================================================
+
+;; Postprocess with e.g.:
+;;   montage -tile 48x30 -geometry 32x32 1512*png a.png
+(defn- render-a-months-statuses
+  [year month]
+  (let [statuses (twitter/get-a-months-statuses tgm/my-twitter-creds tgm/my-screen-name year month)
+        data     (gists/read-archive tgm/my-gist-auth tgm/my-gist-archive-id)] ;; FIXME take archive name
+    (doseq [s statuses]
+      (let [name         (clojure.string/replace (:text s) #" http.*" "")
+            my-code      (:code (gists/get-entry-by-name data name))
+            _            (println name "::" my-code)
+            my-image     (clisk.live/image (eval my-code) :size 32)
+            png-filename (str "images/mosaic/" name ".png")]
+        (tgm/write-png png-filename my-image)))))
+
+(defn render-statuses
+  [names size]
+  (let [data (gists/read-archive tgm/my-gist-auth tgm/my-gist-archive-id)] ;; FIXME take archive name
+    (doseq [name names]
+      (let [my-code      (:code (gists/get-entry-by-name data name))
+            _            (println name "::" my-code)
+            my-image     (clisk.live/image (eval my-code) :size size)
+            png-filename (str "images/tiles/" name ".png")]
+        (tgm/write-png png-filename my-image)))))
+
+(defn- get-top-n
+  "return a sequence of the N highest-scoring tweet image links."
+  [fn N]
+  (let [statuses (->> (fn);; (get-todays-statuses)
+                      (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj .*" (:text %)))
+                      (map #(assoc % :score (tgm/score-status %)))
+                      (map #(dissoc % :user :extended_entities))
+                      (sort-by :score)
+                      (reverse)
+                      (take N))]
+    statuses))
+
+;; (get-top-n get-last-weeks-statuses 3)
+(defn print-top-n
+  [fn N]
+  (doseq [s (get-top-n fn N)]
+    (let [score (:score s)
+          url   (-> s :entities :media first :expanded_url)]
+      (println score url))))
+;;(print-top-n get-last-weeks-statuses 3)
+
+;; geneaology
+(defn- update-layout
+  [layout child parent-map generation y]
+  (let [parents (parent-map child)
+        num-parents (count parents)]
+    ;;(println generation y (count parents) child)
+    ;; if I was smarter, maybe I'd be able to conj this below...
+    (swap! layout #(conj % [generation y num-parents child]))
+        (if (empty? parents)
+          [(inc y) [generation y num-parents child]]
+          (let [generation (inc generation)]
+            (reduce #(do ;; (println "x" y %1 %2)
+                       (update-layout layout (first %2) parent-map generation (max (first %1) (+ y (second %2)))))
+                    [y []]
+                    (map vector parents (range num-parents)))))))
+
+(defn layout-generations
+  [child parent-map]
+  (let [layout (atom [])] ;; vector of vectors [x y num-parents name]
+    (update-layout layout child parent-map 0 0)
+    (sort @layout)))
 
 ;; ======================================================================
-;; Example usage to explore at the repl
+;; code for interactively exploring tweegeemee possibilities
 ;; ======================================================================
 ;; (ns tweegeemee.explore)
 
@@ -60,7 +131,7 @@
 (tgm/post-mutants-to-web "M")
 
 ;; post a status
-(twitter/post-status tgm/my-twitter-creds "Hey, is this on?")
+(twitter/post-status tgm/my-twitter-creds "Hey, is this on? Testing!")
 
 ;; genealogy
 (def rents (tgm/get-parent-tweets 5))
