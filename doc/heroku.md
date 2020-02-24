@@ -12,3 +12,16 @@ source profile.sh
 lein with-profile production compile :all
 lein trampoline run
 ```
+
+Merging git repos...
+
+heroku git:clone -a tweegeemee-production
+cd tweegeemee-production
+git remote add github git@github.com:rogerallen/tweegeemee.git
+
+git fetch github
+git merge github/master
+
+(edits)
+
+git push github
