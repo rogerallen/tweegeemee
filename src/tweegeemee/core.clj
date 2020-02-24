@@ -287,4 +287,7 @@
   (cleanup-our-files!)
   (println "posting complete.")
   (shutdown-agents) ;; quit faster
+  (println "shutdown agents")
+  (twitter/stop)
+  (println "stopped twitter")
   0) ;; return 0 status so we don't look like we crashed

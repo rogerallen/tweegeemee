@@ -1,12 +1,13 @@
 (ns tweegeemee.twitter
   (:require
-   [twitter.api.restful :as tw]
-   [twitter.oauth       :as tw-oauth]
-   [twitter.request     :as tw-req]
    [clj-time.core       :as t]
    [clj-time.format     :as tf]
    ;;[clj-time.periodic   :as tp]
-   ))
+   [twitter.core]
+   [twitter.api.restful :as tw]
+   [twitter.oauth       :as tw-oauth]
+   [twitter.request     :as tw-req]
+   [http.async.client   :as http]))
 
 ;; ======================================================================
 (def DEBUG-NO-POSTING  false) ;; set true when you don't want to post
@@ -141,3 +142,8 @@
         :oauth-creds @oauth-creds
         :params {:status status-str})
        (catch Exception e (println "Oh no! " (.getMessage e)))))
+
+;; see https://github.com/adamwynne/twitter-api/issues/74
+(defn stop
+  []
+  (http/close (twitter.core/default-client)))
