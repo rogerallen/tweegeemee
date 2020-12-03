@@ -14,36 +14,40 @@
   (clojure.string/replace url "." "-"))
 
 (defn- write-str-to-archive
-  "write data-str to the ARCHIVE-FILENAME within the
+  "Only when auth is non-nil, write data-str to the ARCHIVE-FILENAME within the
   @archive-id.  Throws an exception on failure."
   [auth archive-id data-str]
-  (let [resp (gists/edit-gist
-              @archive-id
-              {:auth @auth
-               :files { ARCHIVE-FILENAME { :content data-str }}})]
-    (if (nil? (:status resp))
-      resp
-      (throw (Exception. (str "gist error" (:message (:body resp))))))))
+  (if (nil? auth)
+    nil ;; if auth is nil, just don't do anything
+    (let [resp (gists/edit-gist
+                @archive-id
+                {:auth @auth
+                 :files {ARCHIVE-FILENAME {:content data-str}}})]
+      (if (nil? (:status resp))
+        resp
+        (throw (Exception. (str "gist error: " (:message (:body resp)))))))))
 
 (defn- read-str-from-archive
-  "return str from the ARCHIVE-FILENAME within the
+  "Only when auth is non-nil, return str from the ARCHIVE-FILENAME within the
   @archive-id.  Throws an exception on failure."
   [auth archive-id]
-  (let [resp (try
-               (gists/specific-gist @archive-id {:auth @auth})
-               (catch Exception e
-                 (println "gist read exception: " (.getMessage e))
-                 [] ;; return empty response
-                 ))]
-    (if (nil? (:status resp))
-      (if (-> (:files resp)
+  (if (nil? @auth)
+    "" ;; return empty string if auth is not set
+    (let [resp (try
+                 (gists/specific-gist @archive-id {:auth @auth})
+                 (catch Exception e
+                   (println "gist read exception: " (.getMessage e))
+                   [] ;; return empty response
+                   ))]
+      (if (nil? (:status resp))
+        (if (-> (:files resp)
+                ((keyword ARCHIVE-FILENAME))
+                :truncated)
+          (throw (Exception. (str "truncated gist error")))
+          (-> (:files resp)
               ((keyword ARCHIVE-FILENAME))
-              :truncated)
-        (throw (Exception. (str "truncated gist error")))
-        (-> (:files resp)
-            ((keyword ARCHIVE-FILENAME))
-            :content))
-      (throw (Exception. (str "gist error" (:message (:body resp))))))))
+              :content))
+        (throw (Exception. (str "gist error: " (:message (:body resp)))))))))
 
 (defn- format-archive
   "take array of dicts and return as str.  dicts better be formatted
@@ -105,8 +109,7 @@
       :hash       (hash code)
       :image-hash image-hash
       :code       (pr-str code)
-      :parents    parent-vec
-      })))
+      :parents    parent-vec})))
 
 (defn get-entry-by-name
   [data name]
@@ -114,7 +117,7 @@
 
 (defn get-url
   [archive-id gist-line-number]
-   (str "https://gist.github.com/rogerallen/"
-        @archive-id
-        "#file-" (sanitize-filename ARCHIVE-FILENAME)
-        "-L" gist-line-number "-L" (+ 2 gist-line-number)))
+  (str "https://gist.github.com/rogerallen/"
+       @archive-id
+       "#file-" (sanitize-filename ARCHIVE-FILENAME)
+       "-L" gist-line-number "-L" (+ 2 gist-line-number)))
