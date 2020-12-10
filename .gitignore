@@ -12,3 +12,5 @@ pom.xml.asc
 profiles.clj
 images/*.clj
 images/*.png
+images/*/*.png
+.calva/
