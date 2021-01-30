@@ -14,3 +14,5 @@ images/*.clj
 images/*.png
 images/*/*.png
 .calva/
+profile*sh
+orig_profiles.clj

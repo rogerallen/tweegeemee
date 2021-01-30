@@ -126,6 +126,13 @@
   [entries statuses]
   (map #(add-id-to-entry % statuses) entries))
 
+(defn- get-tweegeemee-url
+  "return canonical tweegeemee.com per-item url.  remove '.clj' from clj-filename
+  to get the key for the url"
+  [clj-filename]
+  (let [key (subs clj-filename 0 (- (count clj-filename) 4))]
+    (str "https://tweegeemee.com/i/" key)))
+
 ;; ======================================================================
 ;; Public API ===========================================================
 ;; ======================================================================
@@ -209,8 +216,9 @@
   (let [image-hash       (image/image-hash (clisk.live/image (eval the-code) :size image/TEST-IMAGE-SIZE))
         gist-line-number (gists/append-archive my-gist-auth my-gist-archive-id clj-filename the-code parent-vec image-hash)
         gist-url         (gists/get-url my-gist-archive-id gist-line-number)
-        status-text      (str clj-filename " " gist-url
-                              " #ProceduralArt #generative")]
+        tweegeemee-url   (get-tweegeemee-url clj-filename)
+        status-text      (str clj-filename "\n" tweegeemee-url "\n" gist-url
+                              "\n#ProceduralArt #generative")]
   (twitter/post-image-file my-twitter-creds status-text png-filename)))
 
 (defn post-batch-to-web*
