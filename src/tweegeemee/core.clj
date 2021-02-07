@@ -195,7 +195,7 @@
   [N]
   (let [archive  (gists/read-archive my-gist-auth my-gist-archive-id)
         statuses (->> (twitter/get-statuses my-twitter-creds my-screen-name NUM-PARENT-TWEETS)
-                      (map #(update-in % [:text] string/replace #" http.*" ""))
+                      (map #(update-in % [:text] string/replace #".clj[\d\D]*" ".clj"))
                       (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
                       (map #(assoc % :score (score-status %)))
                       (sort-by :score)
