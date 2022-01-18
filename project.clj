@@ -1,4 +1,4 @@
-(defproject tweegeemee "1.6.1"
+(defproject tweegeemee "1.7.0"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
@@ -20,6 +20,4 @@
   :target-path  "target/%s"
   :profiles     {:uberjar {:aot :all}
                  ;; lein repl enables full optimizer, no limits
-                 :repl    {:jvm-opts ^:replace []}
-                 }
-  )
+                 :repl    {:jvm-opts ^:replace []}})

@@ -41,7 +41,7 @@
                    `theta `radius `polar `height `height-normal
                    `hue-from-rgb `lightness-from-rgb `saturation-from-rgb
                    `hsl-from-rgb `red-from-hsl `green-from-hsl `blue-from-hsl
-                   `rgb-from-hsl `x `y `z `t `alpha })
+                   `rgb-from-hsl `x `y `z `t `alpha})
 (def binary-fns  #{`v+ `v* `v- `vdivide `vpow `vmod `dot `cross3
                    `vmin `vmax `turbulate `checker `rotate `scale `offset
                    `adjust-hue `adjust-hsl `vconcat `average})
@@ -179,8 +179,7 @@
         ;;for that node. For example (* X .3) might become X. This is the
         ;;inverse of the previous [next] type of mutation.
         (rand-nth (rest node)))
-      (println "UNEXPECTED TYPE:" node (class node))
-      )))
+      (println "UNEXPECTED TYPE:" node (class node)))))
 ;;[See mutate fn]* Finally, a node can become a copy of another node from the
 ;;parent expression. For example (+ (abs X) (* Y .6)) might
 ;;become (+ (abs (* Y .6)) (* Y .6)). This causes effects similar to
@@ -192,6 +191,19 @@
 ;;function. Other arguments are generated at random if
 ;;necessary. For example X might become (* X .3).
 
+(defn- mutate-pan-zoom
+  "mutate the code string L with random scale & offset (aka pan & zoom)"
+  [L]
+  (let [rnd-scale (if (> (rand) 0.5) ; 50/50 zoom in/out
+                    (+ 1.05 (rand 19))
+                    (+ 0.05 (rand 0.90)))
+        rnd-x (- (rand 10.0) 5.0)
+        rnd-y (- (rand 10.0) 5.0)
+        code `((clisk.live/offset [~rnd-x ~rnd-y]
+                                  (clisk.live/scale ~rnd-scale
+                                                    ~L)))]
+    code))
+
 (defn- mutate
   "mutate the code string L according to Karl Sims' SIGGRAPH paper."
   [L]
@@ -201,16 +213,23 @@
         new-node  (mutate-node (zip/node loc1))
         ;;_ (println "newnode" new-node)
         ]
-    (if (nil? new-node)
-      ;; copy random nodes & sub-nodes
-      (replace-loc loc2 loc3)
-      ;; or, replace with new mutant
-      (replace-loc-with-node loc1 new-node))))
+    (if (> (rand) 0.84)
+      ;; NEW! some of the time do a random pan/zoom
+      ;; given errors found in Sim's mutation this needs
+      ;; to be less probable or it will dominate.  Found 
+      ;; rand > 75% led to ~50% pan-zoom as final choice.
+      (mutate-pan-zoom L)
+      ;; most of the time do Karl Sims' mutation
+      (if (nil? new-node)
+        ;; copy random nodes & sub-nodes
+        (replace-loc loc2 loc3)
+        ;; or, replace with new mutant
+        (replace-loc-with-node loc1 new-node)))))
 
 (defn- good-random-code?
   "does code x have at least one paren?"
   [x]
-  (= (first (pr-str x)) \( ))
+  (= (first (pr-str x)) \())
 
 (defn- good-components?
   "are the values of a single color component too dark or not
@@ -286,14 +305,12 @@
             ;;(println @cur-count "Exception" (.getMessage e))
             ;; intentionally NOT printing the exception e, we are
             ;; merely noting this as we attempt to generate good code
-            (print "e")
-            )
+            (print "e"))
           (catch java.util.concurrent.ExecutionException e
             ;;(println @cur-count "execution exception")
             ;; intentionally NOT printing the exception e, we are
             ;; merely noting this as we attempt to generate good code
-            (print "E")
-            )))
+            (print "E"))))
       @good-code)
     (catch Exception e
       (println "get-good-code* Setup Exception" (.getMessage e))
