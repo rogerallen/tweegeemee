@@ -14,8 +14,8 @@
   (:gen-class))
 
 ;; ======================================================================
-(defonce NUM-PARENT-TWEETS 200)  ;; 24 posts/day * 2 imgs = 48 img/day = ~4 days
-(defonce MAX-POSSIBLE-PARENTS 5) ;; top 5 tweets become parents
+(defonce NUM-PARENT-TWEETS 200)   ;; 24 posts/day * 2 imgs = 48 img/day = ~4 days
+(defonce MAX-POSSIBLE-PARENTS 10) ;; top 10 tweets become parents
 
 ;; ======================================================================
 (defonce my-twitter-creds   (atom nil)) ;; oauth from api.twitter.com
@@ -205,8 +205,7 @@
                       (filter #(image/sanity-check-code (str (:code %))))
                       (take N)
                       ;;((fn [x] (println "post-take:" x) x))
-                      (map #(update-in % [:code] (fn [x] (read-string (str x)))))
-                      )]
+                      (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
     statuses))
 
 (defn post-to-web
@@ -219,7 +218,7 @@
         tweegeemee-url   (get-tweegeemee-url clj-filename)
         status-text      (str clj-filename "\n" tweegeemee-url "\n" gist-url
                               "\n#ProceduralArt #generative")]
-  (twitter/post-image-file my-twitter-creds status-text png-filename)))
+    (twitter/post-image-file my-twitter-creds status-text png-filename)))
 
 (defn post-batch-to-web*
   "Post a batch of random codes & images to twitter and github."

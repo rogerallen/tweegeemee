@@ -21,6 +21,7 @@
 (defonce PROB-TERNARY-FN           0.02)  ;; vs. binary or unary
 (defonce PROB-BINARY-FN            0.3)   ;; vs ternary or unary
 (defonce PROB-SINGLE-MUTATION      0.95)  ;; mostly mutate vs. copy
+(defonce PROB-STANDARD-MUTATE      0.84)  ;; standard vs. pan-zoom mutate
 
 ;; ======================================================================
 ;; Functions used in creating imagery.
@@ -213,7 +214,7 @@
         new-node  (mutate-node (zip/node loc1))
         ;;_ (println "newnode" new-node)
         ]
-    (if (> (rand) 0.84)
+    (if (> (rand) PROB-STANDARD-MUTATE)
       ;; NEW! some of the time do a random pan/zoom
       ;; given errors found in Sim's mutation this needs
       ;; to be less probable or it will dominate.  Found 
