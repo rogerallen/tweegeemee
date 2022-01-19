@@ -25,3 +25,11 @@ git merge github/master
 (edits)
 
 git push github
+
+Push to heroku via:
+
+ git push heroku master
+
+see remotes with
+
+ git remote -v
