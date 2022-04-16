@@ -65,13 +65,13 @@
     ;;(println generation y (count parents) child)
     ;; if I was smarter, maybe I'd be able to conj this below...
     (swap! layout #(conj % [generation y num-parents child]))
-        (if (empty? parents)
-          [(inc y) [generation y num-parents child]]
-          (let [generation (inc generation)]
-            (reduce #(do ;; (println "x" y %1 %2)
-                       (update-layout layout (first %2) parent-map generation (max (first %1) (+ y (second %2)))))
-                    [y []]
-                    (map vector parents (range num-parents)))))))
+    (if (empty? parents)
+      [(inc y) [generation y num-parents child]]
+      (let [generation (inc generation)]
+        (reduce #(do ;; (println "x" y %1 %2)
+                   (update-layout layout (first %2) parent-map generation (max (first %1) (+ y (second %2)))))
+                [y []]
+                (map vector parents (range num-parents)))))))
 
 (defn layout-generations
   [child parent-map]

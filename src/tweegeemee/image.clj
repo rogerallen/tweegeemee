@@ -37,7 +37,7 @@
                    `grain `turbulence `vturbulence
                    `spots `blotches `agate `clouds `velvet `flecks `wood})
 (def unary-fns   #{`vsin `vcos `vabs `vround `vfloor `vfrac
-                   `square `vsqrt `sigmoid `triangle-wave `max-component `min-component
+                   `square `vsqrt `sigmoid `max-component `min-component
                    `length `normalize `gradient
                    `theta `radius `polar `height `height-normal
                    `hue-from-rgb `lightness-from-rgb `saturation-from-rgb
@@ -200,9 +200,9 @@
                     (+ 0.05 (rand 0.90)))
         rnd-x (- (rand 10.0) 5.0)
         rnd-y (- (rand 10.0) 5.0)
-        code `((clisk.live/offset [~rnd-x ~rnd-y]
-                                  (clisk.live/scale ~rnd-scale
-                                                    ~L)))]
+        code `(clisk.live/offset [~rnd-x ~rnd-y]
+                                 (clisk.live/scale ~rnd-scale
+                                                   ~L))]
     code))
 
 (defn- mutate

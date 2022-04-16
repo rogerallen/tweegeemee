@@ -239,16 +239,26 @@
     (post-batch-to-web* (partial make-random-code-and-png timestamp-str)
                         "random" suffix-str [])))
 
+(defn rand-nth-or-nil
+  "protect from empty list rand-nth"
+  [lst]
+  (if (= 0 (count lst))
+    nil
+    (rand-nth lst)))
+
 (defn post-children-to-web
   "Find the highest-scoring parents, post a batch of codes & images
   bred from those parents to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
         rents         (get-parent-tweets MAX-POSSIBLE-PARENTS)
-        c0            (rand-nth rents)
-        c1            (rand-nth rents)]
-    (post-batch-to-web* (partial make-random-child-and-png (:code c0) (:code c1) timestamp-str)
-                        "repro" suffix-str [(:name c0) (:name c1)])))
+        c0            (rand-nth-or-nil rents)
+        c1            (rand-nth-or-nil rents)
+        can-work      (and (some? c0) (some? c1))]
+    (if can-work
+      (post-batch-to-web* (partial make-random-child-and-png (:code c0) (:code c1) timestamp-str)
+                          "repro" suffix-str [(:name c0) (:name c1)])
+      (println "INFO: No parents.  Cannot create child to post."))))
 
 (defn post-mutants-to-web
   "Find the highest-scoring parents, post a batch of 5 codes & images
@@ -256,9 +266,12 @@
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
         rents         (get-parent-tweets MAX-POSSIBLE-PARENTS)
-        c0            (rand-nth rents)]
-    (post-batch-to-web* (partial make-random-mutant-and-png (:code c0) timestamp-str)
-                        "mutant" suffix-str [(:name c0)])))
+        c0            (rand-nth-or-nil rents)
+        can-work      (some? c0)]
+    (if can-work
+      (post-batch-to-web* (partial make-random-mutant-and-png (:code c0) timestamp-str)
+                          "mutant" suffix-str [(:name c0)])
+      (println "INFO: No parent.  Cannot create mutant to post."))))
 
 ;; fix https://github.com/rogerallen/tweegeemee/issues/14
 ;; add twitter id to gist data
