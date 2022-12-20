@@ -304,7 +304,10 @@
     1 (post-children-to-web "CD")
     2 (post-mutants-to-web "MN"))
   (reconcile-gist-twitter-ids)
-  (cleanup-our-files!)
+  ;; not cleaning up after ourselves any longer
+  ;; leaving the files allows for local archival and posts to more social networks
+  ;; and requires a separate process to clean up those files
+  ;; (cleanup-our-files!)
   (println "posting complete.")
   (shutdown-agents) ;; quit faster
   (println "shutdown agents")
