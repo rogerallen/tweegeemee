@@ -8,7 +8,8 @@
    [tweegeemee.gists   :as gists]
    [environ.core       :refer [env]]
    [clojure.string     :as string]
-   [clojure.java.io    :as io])
+   [clojure.java.io    :as io]
+   [clojure.java.jdbc  :as sql])
   (:import [java.io File]
            [javax.imageio ImageIO])
   (:gen-class))
@@ -22,6 +23,7 @@
 (defonce my-screen-name     (atom nil)) ;; twitter screen name
 (defonce my-gist-auth       (atom nil)) ;; gist username:password
 (defonce my-gist-archive-id (atom nil)) ;; create this archive
+(defonce my-pg-db           (atom nil))
 
 ;; ======================================================================
 (defn write-png
@@ -157,6 +159,12 @@
                               (env :app-consumer-secret)
                               (env :user-access-token)
                               (env :user-access-secret)))
+  (reset! my-pg-db {:dbtype "postgresql"
+                    :dbname (env :db-name)
+                    :host (env :db-host)
+                    :port (env :db-port)
+                    :user (env :db-user)
+                    :password (env :db-user-pass)})
   (reset! my-screen-name     (env :screen-name))
   (println "my-screen-name" @my-screen-name)
   (reset! my-gist-auth       (env :gist-auth))
@@ -183,12 +191,14 @@
   [code]
   (image/get-random-mutant my-gist-auth my-gist-archive-id code))
 
+;; DEPRECATED--see below
 (defn score-status
   "return a score for a image's tweet based on favorites and
   retweets. retweets count more than favorites"
   [status]
   (+ (* 3 (:retweet_count status)) (:favorite_count status)))
 
+;; DEPRECATED--see below
 (defn get-parent-tweets
   "return a sequence of the N highest-scoring tweets.  Tweet data is
   from the gist file."
@@ -207,6 +217,31 @@
                       ;;((fn [x] (println "post-take:" x) x))
                       (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
     statuses))
+
+(defn score-status1
+  "return a score for a image's tweet based on favorites and 
+   retweets. retweets count more than favorites--updated for Mastodon 
+   retweets & favorites."
+  [status]
+  (+ (* 3 (+ (:retweet_count status) (:retweet_count1 status)))
+     (+ (:favorite_count status) (:favorite_count status))))
+
+(defn get-parent-tweets-from-db
+  "return a sequence of the N highest-scoring tweets.  Tweet data is
+   from the local database.  Data from DB is slightly different than from GIST,
+   but current use of :code and :name matches"
+  [N]
+  (let [statuses (->> (sql/query
+                       @my-pg-db
+                       ["SELECT * FROM items WHERE gist_id = ? ORDER BY key DESC LIMIT ?"
+                        @my-gist-archive-id NUM-PARENT-TWEETS])
+                      (map #(assoc % :score (score-status1 %)))
+                      (sort-by :score)
+                      (reverse)
+                      (take N)
+                      (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
+    statuses))
+
 
 (defn post-to-web
   "Post the-code + clj-filename info to gist.github.com, post
@@ -251,7 +286,7 @@
   bred from those parents to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweets MAX-POSSIBLE-PARENTS)
+        rents         (get-parent-tweets-from-db MAX-POSSIBLE-PARENTS)
         c0            (rand-nth-or-nil rents)
         c1            (rand-nth-or-nil rents)
         can-work      (and (some? c0) (some? c1))]
@@ -265,7 +300,7 @@
   mutated from the top parent to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweets MAX-POSSIBLE-PARENTS)
+        rents         (get-parent-tweets-from-db MAX-POSSIBLE-PARENTS)
         c0            (rand-nth-or-nil rents)
         can-work      (some? c0)]
     (if can-work

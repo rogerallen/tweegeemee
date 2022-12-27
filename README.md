@@ -1,8 +1,12 @@
 # tweegeemee (트의기미)
 
-A Clojure library designed to breed images via twitter.  Now running on Heroku.
+A Clojure library designed to breed images via twitter and other social media.  
 
-See https://twitter.com/tweegeemee/media for the latest images.
+Since it was written in 2015, this library has grown and matured into a larger system of parts.  This is the original piece that creates and posts images to Twitter.  There is now a website http://tweegeemee.com, an underlying database and as of December, 2022 posting to Mastodon has begun.  While those other pieces are  not open source, this code will remain open source.
+
+Adding Mastodon support is forcing me to rearchitect a few things to use a real database instead of the current gist-based "database" that I have historically used.  I'm calling this "Version 2.0" and we wil be deprecating the gist file use going forward.  Docs probably won't be updated to keep up with these changes...unless I get requests from interested developers.
+
+## Background
 
 Each tweet has a name based on the timestamp of creation with a suffix
 at the end, a link to a github gist and a hashtag (currently #ProceduralArt).
@@ -93,7 +97,7 @@ To save an image, do
 
 ## License
 
-Copyright © 2015-2020 Roger Allen
+Copyright © 2015-2022 Roger Allen
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
