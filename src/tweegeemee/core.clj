@@ -41,10 +41,12 @@
   []
   (filter #(re-matches #".*\.clj|.*\.png" (.getName %)) (file-seq (io/file "images"))))
 
-(defn- cleanup-our-files!
-  "remove all of our images/*.clj and images/*.png files"
+(comment
+ (defn- cleanup-our-files!
+  "DEPRECATED. remove all of our images/*.clj and images/*.png files"
   []
   (dorun (map #(io/delete-file %) (get-our-file-seq))))
+)
 
 (defn- get-png-filename
   [timestamp suffix]
@@ -53,6 +55,10 @@
 (defn- get-clj-filename
   [timestamp suffix]
   (str "images/" timestamp "_" suffix ".clj"))
+
+(defn- get-json-filename
+  [timestamp suffix]
+  (str "images/" timestamp "_" suffix ".json"))
 
 (defn- get-clj-basename
   [timestamp suffix]
@@ -68,30 +74,31 @@
       (let [png-filename (get-png-filename timestamp suffix)
             my-image     (clisk.live/image (eval my-code) :size image/IMAGE-SIZE)
             clj-filename (get-clj-filename timestamp suffix)
+            json-filename (get-json-filename timestamp suffix)
             clj-basename (get-clj-basename timestamp suffix)]
         (write-png png-filename my-image)
         (spit clj-filename (pr-str my-code))
-        [my-code clj-basename png-filename]))))
+        [my-code clj-basename png-filename json-filename]))))
 
 (declare get-random-code)
 (declare get-random-child)
 (declare get-random-mutant)
 (defn- make-random-code-and-png
-  "make random code and save as files. return the code, clj-filename
-  and png-filename"
+  "make random code and save as files. return the code, clj-filename,
+  png-filename and json-filename"
   [timestamp suffix]
   (make-code-and-png* get-random-code timestamp suffix))
 
 (defn- make-random-child-and-png
   "take 2 codes, breed them and save as files. return the code,
-  clj-filename and png-filename"
+  clj-filename, png-filename and json-filename"
   [code0 code1 timestamp suffix]
   (make-code-and-png* (partial get-random-child code0 code1)
                       timestamp suffix))
 
 (defn- make-random-mutant-and-png
   "take a code, mutate it and save as files. return the code,
-  clj-filename and png-filename"
+  clj-filename, png-filename and json-filename"
   [code timestamp suffix]
   (make-code-and-png* (partial get-random-mutant code)
                       timestamp suffix))
@@ -198,7 +205,8 @@
   [status]
   (+ (* 3 (:retweet_count status)) (:favorite_count status)))
 
-;; DEPRECATED--see below
+;; DEPRECATED--now getting this from DB
+(comment
 (defn get-parent-tweets
   "return a sequence of the N highest-scoring tweets.  Tweet data is
   from the gist file."
@@ -217,6 +225,7 @@
                       ;;((fn [x] (println "post-take:" x) x))
                       (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
     statuses))
+  )
 
 (defn score-status1
   "return a score for a image's tweet based on favorites and 
@@ -255,16 +264,55 @@
                               "\n#ProceduralArt #generative")]
     (twitter/post-image-file my-twitter-creds status-text png-filename)))
 
+(defn save-locally
+  "Save the-code & info to a local directory. 
+   clj-file png-file have already been saved"
+  [the-code json-filename parent-vec]
+  (let [image-hash (image/image-hash (clisk.live/image (eval the-code) :size image/TEST-IMAGE-SIZE))
+        code-hash (hash the-code)
+        random-seed (env :clisk-random-seed)
+        parent0 (first parent-vec)
+        parent1 (first (rest parent-vec))
+        ;; a bit of a hack, but it works...
+        my-json-str (str 
+                     "{\n"
+                     "    \"parents\": [" 
+                     (if (nil? parent0)
+                       ""
+                       (if (nil? parent1)
+                         (str "\"" parent0 "\"")
+                         (str "\"" parent0 "\", \"" parent1 "\"" )))
+                     "],\n"
+                     "    \"hash\": " (str code-hash) ",\n"       
+                     "    \"image_hash\": " (str image-hash) ",\n"       
+                     "    \"random_seed\": " random-seed "\n"       
+                     "}\n")
+        
+        ]
+    (spit json-filename my-json-str)))
+
 (defn post-batch-to-web*
   "Post a batch of random codes & images to twitter and github."
   [make-fn post-str suffix-str parent-vec]
   (dorun
    (doseq [suffix suffix-str]
      (let [_ (println post-str "begin" suffix)
-           [the-code clj-filename png-filename] (make-fn suffix)]
+           [the-code clj-filename png-filename _] (make-fn suffix)]
        (if (nil? the-code)
          (println "!!! suffix" suffix "unable to create" post-str "image")
          (post-to-web the-code clj-filename png-filename parent-vec)))))
+  (println post-str "done."))
+
+(defn make-batch*
+  "Make & save a batch of random codes & images, plus save info about them in a json file."
+  [make-fn post-str suffix-str parent-vec]
+  (dorun
+   (doseq [suffix suffix-str]
+     (let [_ (println post-str "begin" suffix)
+           [the-code _ _ json-filename] (make-fn suffix)]
+       (if (nil? the-code)
+         (println "!!! suffix" suffix "unable to create" post-str "image")
+         (save-locally the-code json-filename parent-vec)))))
   (println post-str "done."))
 
 (defn post-random-batch-to-web
@@ -273,6 +321,13 @@
   (let [timestamp-str (get-timestamp-str)]
     (post-batch-to-web* (partial make-random-code-and-png timestamp-str)
                         "random" suffix-str [])))
+
+(defn make-random-batch
+  "Make a batch of random codes & images."
+  [suffix-str]
+  (let [timestamp-str (get-timestamp-str)]
+    (make-batch* (partial make-random-code-and-png timestamp-str)
+                 "random" suffix-str [])))
 
 (defn rand-nth-or-nil
   "protect from empty list rand-nth"
@@ -295,6 +350,20 @@
                           "repro" suffix-str [(:name c0) (:name c1)])
       (println "INFO: No parents.  Cannot create child to post."))))
 
+(defn make-children
+  "Find the highest-scoring parents, make a batch of codes & images
+  bred from those parents"
+  [suffix-str]
+  (let [timestamp-str (get-timestamp-str)
+        rents         (get-parent-tweets-from-db MAX-POSSIBLE-PARENTS)
+        c0            (rand-nth-or-nil rents)
+        c1            (rand-nth-or-nil rents)
+        can-work      (and (some? c0) (some? c1))]
+    (if can-work
+      (make-batch* (partial make-random-child-and-png (:code c0) (:code c1) timestamp-str)
+                   "repro" suffix-str [(:name c0) (:name c1)])
+      (println "INFO: No parents.  Cannot create child to post."))))
+
 (defn post-mutants-to-web
   "Find the highest-scoring parents, post a batch of 5 codes & images
   mutated from the top parent to twitter and github"
@@ -306,6 +375,19 @@
     (if can-work
       (post-batch-to-web* (partial make-random-mutant-and-png (:code c0) timestamp-str)
                           "mutant" suffix-str [(:name c0)])
+      (println "INFO: No parent.  Cannot create mutant to post."))))
+
+(defn make-mutants
+  "Find the highest-scoring parents, post a batch of 5 codes & images
+  mutated from the top parent to twitter and github"
+  [suffix-str]
+  (let [timestamp-str (get-timestamp-str)
+        rents         (get-parent-tweets-from-db MAX-POSSIBLE-PARENTS)
+        c0            (rand-nth-or-nil rents)
+        can-work      (some? c0)]
+    (if can-work
+      (make-batch* (partial make-random-mutant-and-png (:code c0) timestamp-str)
+                   "mutant" suffix-str [(:name c0)])
       (println "INFO: No parent.  Cannot create mutant to post."))))
 
 ;; fix https://github.com/rogerallen/tweegeemee/issues/14
@@ -328,10 +410,21 @@
 ;; ======================================================================
 ;; main entry
 ;; ======================================================================
+(defn new-main []
+  (println "posting one of: random ab, children CD or mutant MN")
+  (setup-env!)
+  (case (mod (cur-hour) 3)
+    0 (make-random-batch "ab")
+    1 (make-children "CD")
+    2 (make-mutants "MN"))
+  (println "posting complete.")
+  (shutdown-agents) ;; quit faster
+  (println "shutdown agents")
+  (twitter/stop)
+  (println "stopped twitter")
+  0)
 
-(defn -main [& args]
-  (println "======================================================================")
-  (println "Started version" (env :tweegeemee-version))
+(defn original-main []
   (println "posting one of: random ab, children CD or mutant MN")
   (setup-env!)
   (case (mod (cur-hour) 3)
@@ -348,4 +441,13 @@
   (println "shutdown agents")
   (twitter/stop)
   (println "stopped twitter")
-  0) ;; return 0 status so we don't look like we crashed
+  0)  ;; return 0 status so we don't look like we crashed
+
+(defn -main [& args]
+  (println "======================================================================")
+  (println "Started version" (env :tweegeemee-version))
+  (if (seq args)
+    (if (= (first args) "new")
+      (new-main)
+      1)
+    (original-main)))

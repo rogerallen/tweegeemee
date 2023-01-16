@@ -10,6 +10,7 @@ pom.xml.asc
 .hgignore
 .hg/
 profiles.clj
+images/*.json
 images/*.clj
 images/*.png
 images/*/*.png
