@@ -1,9 +1,11 @@
 (ns tweegeemee.explore
   (:use [clisk live])
   (:require
+   [environ.core       :refer [env]]
    [tweegeemee.core    :as tgm]
    [tweegeemee.twitter :as twitter]
-   [tweegeemee.gists   :as gists]))
+   [tweegeemee.gists   :as gists]
+   [clojure.java.jdbc  :as sql]))
 
 ;; ======================================================================
 ;; ideas for facebook/tumbler/etc posts
@@ -174,4 +176,72 @@
   ;;    :statuses
   ;;    :/statuses/user_timeline)
   ;; {:limit 180, :remaining 180, :reset 1455205245}
+
+  ;; DB stuff
+
+  (def pg-db {:dbtype "postgresql"
+              :dbname (env :db-name)
+              :host (env :db-host)
+              :port (env :db-port)
+              :user (env :db-user)
+              :password (env :db-user-pass)})
+
+  (map :key (sql/query pg-db ["SELECT * FROM items LIMIT 3"]))
+
+  ;; here is current flow...
+  (tgm/get-parent-tweets 2)
+  ;; gets 200 tgm/NUM-PARENT-TWEETS
+  ;; this returns a sequence containing these keys:
+  ;; ({:name "221221_083026_N.clj",
+  ;;   :parents ["221218_063025_b.clj"],
+  ;;   :hash 1044783308,
+  ;;   :image-hash 1210245292,
+  ;;   :twitter-id 1605481049521127425,
+  ;;   :code (clisk.live/height-normal (clisk.live/gradient ... }
+
+  (defn score-status1
+    "return a score for a image's tweet based on favorites and 
+     retweets. retweets count more than favorites"
+    [status]
+    (+ (* 3 (+ (:retweet_count status) (:retweet_count1 status)))
+       (+ (:favorite_count status) (:favorite_count status))))
+
+  ;; TODO 
+  ;; change parents0,1 into parents array...maybe?
+  ;; actually looks like only :code & :name are used.
+  (->> (sql/query
+        pg-db
+        ["SELECT * FROM items WHERE gist_id = ? ORDER BY key DESC LIMIT ?"
+         @tgm/my-gist-archive-id
+         tgm/NUM-PARENT-TWEETS])
+       (map #(assoc % :score (score-status1 %)))
+       (sort-by :score)
+       (reverse)
+       (take 2)
+       ;;(map #(assoc % :parents [(:parent0 %) (:parent1 %)])) ;; ALMOST
+       (map #(update-in % [:code] (fn [x] (read-string (str x))))))
+
+  ;; returns superset 
+  ;; ({:hash 1044783308,
+  ;;   :key "221221_083026_N",
+  ;;   :favorite_count1 0,
+  ;;   :name "221221_083026_N.clj",
+  ;;   :twitter_id 1605481049521127425,
+  ;;   :gist_item_url "https://gist.github.com/rogerallen/976851ae84e460e075933e048ca653b5#file-1_archive-edn-L2063-L2065",
+  ;;   :modified #inst "2022-12-21T21:31:27.864332000-00:00",
+  ;;   :image_url "http://pbs.twimg.com/media/FkfQgc2UoAISmbI.png",
+  ;;   :score 20,
+  ;;   :kind "mutant",
+  ;;   :code (clisk.live/height-normal (clisk.live/gradient ...,
+  ;;   :datetime #inst "2022-12-21T08:30:26.000000000-00:00",
+  ;;   :gist_id "976851ae84e460e075933e048ca653b5",
+  ;;   :mastodon_id nil,
+  ;;   :parent0 "221218_063025_b",
+  ;;   :parent1 "",
+  ;;   :image_hash 1210245292,
+  ;;   :retweet_count1 0,
+  ;;   :retweet_count 2,
+  ;;   :favorite_count 7}
+
+  ;;
   )
