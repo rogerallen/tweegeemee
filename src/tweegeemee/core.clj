@@ -42,11 +42,10 @@
   (filter #(re-matches #".*\.clj|.*\.png" (.getName %)) (file-seq (io/file "images"))))
 
 (comment
- (defn- cleanup-our-files!
-  "DEPRECATED. remove all of our images/*.clj and images/*.png files"
-  []
-  (dorun (map #(io/delete-file %) (get-our-file-seq))))
-)
+  (defn- cleanup-our-files!
+    "DEPRECATED. remove all of our images/*.clj and images/*.png files"
+    []
+    (dorun (map #(io/delete-file %) (get-our-file-seq)))))
 
 (defn- get-png-filename
   [timestamp suffix]
@@ -207,25 +206,24 @@
 
 ;; DEPRECATED--now getting this from DB
 (comment
-(defn get-parent-tweets
-  "return a sequence of the N highest-scoring tweets.  Tweet data is
-  from the gist file."
-  [N]
-  (let [archive  (gists/read-archive my-gist-auth my-gist-archive-id)
-        statuses (->> (twitter/get-statuses my-twitter-creds my-screen-name NUM-PARENT-TWEETS)
-                      (map #(update-in % [:text] string/replace #".clj[\d\D]*" ".clj"))
-                      (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
-                      (map #(assoc % :score (score-status %)))
-                      (sort-by :score)
-                      (reverse)
-                      (map :text)
-                      (mapcat #(filter (fn [x] (= (:name x) %)) archive))
-                      (filter #(image/sanity-check-code (str (:code %))))
-                      (take N)
-                      ;;((fn [x] (println "post-take:" x) x))
-                      (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
-    statuses))
-  )
+  (defn get-parent-tweets
+    "return a sequence of the N highest-scoring tweets.  Tweet data is
+     from the gist file."
+    [N]
+    (let [archive  (gists/read-archive my-gist-auth my-gist-archive-id)
+          statuses (->> (twitter/get-statuses my-twitter-creds my-screen-name NUM-PARENT-TWEETS)
+                        (map #(update-in % [:text] string/replace #".clj[\d\D]*" ".clj"))
+                        (filter #(re-matches #"\d\d\d\d\d\d_\d\d\d\d\d\d_\w+.clj" (:text %)))
+                        (map #(assoc % :score (score-status %)))
+                        (sort-by :score)
+                        (reverse)
+                        (map :text)
+                        (mapcat #(filter (fn [x] (= (:name x) %)) archive))
+                        (filter #(image/sanity-check-code (str (:code %))))
+                        (take N)
+                        ;;((fn [x] (println "post-take:" x) x))
+                        (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
+      statuses)))
 
 (defn score-status1
   "return a score for a image's tweet based on favorites and 
@@ -251,6 +249,21 @@
                       (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
     statuses))
 
+(defn get-parent-tweets-from-db-new
+  "return a sequence of the N highest-scoring tweets.  Tweet data is
+   from the local database and should match the random-seed.  No longer
+   using the gist website."
+  [random-seed N]
+  (let [statuses (->> (sql/query
+                       @my-pg-db
+                       ["SELECT * FROM items WHERE random_seed = ? ORDER BY key DESC LIMIT ?"
+                        random-seed NUM-PARENT-TWEETS])
+                      (map #(assoc % :score (score-status1 %)))
+                      (sort-by :score)
+                      (reverse)
+                      (take N)
+                      (map #(update-in % [:code] (fn [x] (read-string (str x))))))]
+    statuses))
 
 (defn post-to-web
   "Post the-code + clj-filename info to gist.github.com, post
@@ -274,21 +287,19 @@
         parent0 (first parent-vec)
         parent1 (first (rest parent-vec))
         ;; a bit of a hack, but it works...
-        my-json-str (str 
+        my-json-str (str
                      "{\n"
-                     "    \"parents\": [" 
+                     "    \"parents\": ["
                      (if (nil? parent0)
                        ""
                        (if (nil? parent1)
                          (str "\"" parent0 "\"")
-                         (str "\"" parent0 "\", \"" parent1 "\"" )))
+                         (str "\"" parent0 "\", \"" parent1 "\"")))
                      "],\n"
-                     "    \"hash\": " (str code-hash) ",\n"       
-                     "    \"image_hash\": " (str image-hash) ",\n"       
-                     "    \"random_seed\": " random-seed "\n"       
-                     "}\n")
-        
-        ]
+                     "    \"hash\": " (str code-hash) ",\n"
+                     "    \"image_hash\": " (str image-hash) ",\n"
+                     "    \"random_seed\": " random-seed "\n"
+                     "}\n")]
     (spit json-filename my-json-str)))
 
 (defn post-batch-to-web*
@@ -355,7 +366,7 @@
   bred from those parents"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweets-from-db MAX-POSSIBLE-PARENTS)
+        rents         (get-parent-tweets-from-db-new (Integer/parseInt (env :clisk-random-seed)) MAX-POSSIBLE-PARENTS)
         c0            (rand-nth-or-nil rents)
         c1            (rand-nth-or-nil rents)
         can-work      (and (some? c0) (some? c1))]
@@ -382,7 +393,7 @@
   mutated from the top parent to twitter and github"
   [suffix-str]
   (let [timestamp-str (get-timestamp-str)
-        rents         (get-parent-tweets-from-db MAX-POSSIBLE-PARENTS)
+        rents         (get-parent-tweets-from-db-new (Integer/parseInt (env :clisk-random-seed)) MAX-POSSIBLE-PARENTS)
         c0            (rand-nth-or-nil rents)
         can-work      (some? c0)]
     (if can-work
@@ -410,19 +421,23 @@
 ;; ======================================================================
 ;; main entry
 ;; ======================================================================
-(defn new-main []
+(defn new-main [args]
   (println "posting one of: random ab, children CD or mutant MN")
   (setup-env!)
-  (case (mod (cur-hour) 3)
-    0 (make-random-batch "ab")
-    1 (make-children "CD")
-    2 (make-mutants "MN"))
-  (println "posting complete.")
-  (shutdown-agents) ;; quit faster
-  (println "shutdown agents")
-  (twitter/stop)
-  (println "stopped twitter")
-  0)
+  (let [gen (if (empty? args)
+              (mod (cur-hour) 3)
+              (Integer/parseInt (first args)))]
+    (println "posting gen=" gen)
+    (case gen
+      0 (make-random-batch "ab")
+      1 (make-children "CD")
+      2 (make-mutants "MN"))
+    (println "posting complete.")
+    (shutdown-agents) ;; quit faster
+    (println "shutdown agents")
+    (twitter/stop)
+    (println "stopped twitter")
+    0))
 
 (defn original-main []
   (println "posting one of: random ab, children CD or mutant MN")
@@ -448,6 +463,6 @@
   (println "Started version" (env :tweegeemee-version))
   (if (seq args)
     (if (= (first args) "new")
-      (new-main)
+      (new-main (rest args))
       1)
     (original-main)))
