@@ -20,3 +20,4 @@ orig_profiles.clj
 .lsp/
 .clj-kondo/
 .vscode/
+archive/
