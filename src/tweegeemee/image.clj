@@ -3,7 +3,6 @@
   (:require
    ;;[clisk.live] tried this, but caused issues
    [clisk.patterns]
-   [tweegeemee.gists :as gists]
    [clojure.set      :as set]
    [clojure.string   :as string]
    [clojure.zip      :as zip]))
@@ -262,26 +261,16 @@
              (good-components? (map second values))
              (good-components? (map third values))))))
 
-(defn- get-old-hashes
-  "return a vector of :hash and :image-hash data from the gist
-  archive."
-  [gist-auth gist-archive-id]
-  (let [data (gists/read-archive gist-auth gist-archive-id)
-        old-hashes (set (map :hash data))
-        old-image-hashes (set (map :image-hash data))]
-    [old-hashes old-image-hashes]))
-
 (declare image-hash)
 (defn- get-good-code*
   "The main code-generation workhorse function.  Given a
   code-creator-fn (random, breed or combine), return some code that
   creates non-boring images.  Tries for a while, but if it gives up,
   it returns nil."
-  [code-creator-fn gist-auth gist-archive-id]
+  [code-creator-fn my-old-hashes my-old-image-hashes]
   (try
     (let [cur-count  (atom 0)
           good-image (atom false)
-          [old-hashes old-image-hashes] (get-old-hashes gist-auth gist-archive-id)
           good-code  (atom nil)]
       (while (and (< @cur-count MAX-GOOD-CODE-ATTEMPTS)
                   (not @good-image))
@@ -289,12 +278,12 @@
         (try
           (let [cur-code (code-creator-fn)
                 ;;_ (println "\n??" cur-code)
-                _ (when-not (nil? (old-hashes (hash cur-code)))
+                _ (when-not (nil? (@my-old-hashes (hash cur-code)))
                     (throw (Exception. "previously created code")))
                 _ (when-not (good-random-code? cur-code)
                     (throw (Exception. "badly created code")))
                 img (clisk.live/image (eval cur-code) :size TEST-IMAGE-SIZE)
-                _ (when-not (nil? (old-image-hashes (image-hash img)))
+                _ (when-not (nil? (@my-old-image-hashes (image-hash img)))
                     (throw (Exception. "previously created image")))
                 _ (when-not (good-image? img)
                     (throw (Exception. "boring image")))]
@@ -322,19 +311,19 @@
 
 (defn get-random-code
   "get a good image-creation code created randomly"
-  [gist-auth gist-archive-id]
-  (get-good-code* (fn [] (random-code MAX-RANDOM-CODE-DEPTH)) gist-auth gist-archive-id))
+  [my-old-hashes my-old-image-hashes]
+  (get-good-code* (fn [] (random-code MAX-RANDOM-CODE-DEPTH)) my-old-hashes my-old-image-hashes))
 
 (defn get-random-child
   "get a good image-creation code created via breeding two other
   codes"
-  [gist-auth gist-archive-id code0 code1]
-  (get-good-code* (fn [] (breed code0 code1)) gist-auth gist-archive-id))
+  [my-old-hashes my-old-image-hashes code0 code1]
+  (get-good-code* (fn [] (breed code0 code1)) my-old-hashes my-old-image-hashes))
 
 (defn get-random-mutant
   "get a good image-creation code created via mutating a code"
-  [gist-auth gist-archive-id code]
-  (get-good-code* (fn [] (mutate code)) gist-auth gist-archive-id))
+  [my-old-hashes my-old-image-hashes code]
+  (get-good-code* (fn [] (mutate code)) my-old-hashes my-old-image-hashes))
 
 (defn sanity-check-code
   "be careful with strange code you download from the web, son.  Only

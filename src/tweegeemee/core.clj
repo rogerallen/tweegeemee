@@ -19,11 +19,13 @@
 (defonce MAX-POSSIBLE-PARENTS 10) ;; top 10 tweets become parents
 
 ;; ======================================================================
-(defonce my-twitter-creds   (atom nil)) ;; oauth from api.twitter.com
-(defonce my-screen-name     (atom nil)) ;; twitter screen name
-(defonce my-gist-auth       (atom nil)) ;; gist username:password
-(defonce my-gist-archive-id (atom nil)) ;; create this archive
-(defonce my-pg-db           (atom nil))
+(defonce my-twitter-creds    (atom nil)) ;; oauth from api.twitter.com
+(defonce my-screen-name      (atom nil)) ;; twitter screen name
+(defonce my-gist-auth        (atom nil)) ;; gist username:password
+(defonce my-gist-archive-id  (atom nil)) ;; create this archive
+(defonce my-pg-db            (atom nil))
+(defonce my-old-hashes       (atom nil))
+(defonce my-old-image-hashes (atom nil))
 
 ;; ======================================================================
 (defn write-png
@@ -181,21 +183,44 @@
     (clisk.patterns/seed-simplex-noise! seed))
   nil)
 
+(defn- set-old-hashes!
+  "reset my-old-hashes and image-hashes from the gist archive."
+  []
+  (let [data (gists/read-archive my-gist-auth my-gist-archive-id)
+        old-hashes (set (map :hash data))
+        old-image-hashes (set (map :image-hash data))]
+    (reset! my-old-hashes old-hashes)
+    (reset! my-old-image-hashes old-image-hashes)))
+
+(defn- set-old-hashes-from-db!
+  "return a vector of :hash and :image-hash data from the DB."
+  []
+  (let [random-seed (Integer/parseInt (env :clisk-random-seed))
+        data (sql/query
+              @my-pg-db
+              ["SELECT hash,image_hash FROM items WHERE random_seed = ?"
+               random-seed])
+        old-hashes (set (map :hash data))
+        old-image-hashes (set (map :image_hash data))
+        _ (println "Current generation seed" random-seed "has" (count data) "items.")]
+    (reset! my-old-hashes old-hashes)
+    (reset! my-old-image-hashes old-image-hashes)))
+
 (defn get-random-code
   "get a good image-creation code created randomly"
   []
-  (image/get-random-code my-gist-auth my-gist-archive-id))
+  (image/get-random-code my-old-hashes my-old-image-hashes))
 
 (defn get-random-child
   "get a good image-creation code created via breeding two other
   codes"
   [code0 code1]
-  (image/get-random-child my-gist-auth my-gist-archive-id code0 code1))
+  (image/get-random-child my-old-hashes my-old-image-hashes code0 code1))
 
 (defn get-random-mutant
   "get a good image-creation code created via mutating a code"
   [code]
-  (image/get-random-mutant my-gist-auth my-gist-archive-id code))
+  (image/get-random-mutant my-old-hashes my-old-image-hashes code))
 
 ;; DEPRECATED--see below
 (defn score-status
@@ -403,6 +428,7 @@
 
 ;; fix https://github.com/rogerallen/tweegeemee/issues/14
 ;; add twitter id to gist data
+;; this is no longer required
 (defn reconcile-gist-twitter-ids
   []
   (loop [entries (gists/read-archive my-gist-auth my-gist-archive-id)
@@ -427,6 +453,7 @@
   (let [gen (if (empty? args)
               (mod (cur-hour) 3)
               (Integer/parseInt (first args)))]
+    (set-old-hashes-from-db!)
     (println "posting gen=" gen)
     (case gen
       0 (make-random-batch "ab")
@@ -442,6 +469,7 @@
 (defn original-main []
   (println "posting one of: random ab, children CD or mutant MN")
   (setup-env!)
+  (set-old-hashes!)
   (case (mod (cur-hour) 3)
     0 (post-random-batch-to-web "ab")
     1 (post-children-to-web "CD")
