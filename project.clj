@@ -1,4 +1,4 @@
-(defproject tweegeemee "2.2.0"
+(defproject tweegeemee "2.3.0"
   :description  "tweegeemee is an experiment in image creation and breeding via twitter."
   :url          "http://github.com/rogerallen/tweegeemee"
   :license      {:name "Eclipse Public License"
@@ -6,8 +6,6 @@
   :dependencies [[org.clojure/clojure       "1.10.0"]
                  [net.mikera/clisk          "0.11.0"]
                  [environ                   "1.1.0"]
-                 [irresponsible/tentacles   "0.6.6"]
-                 [twitter-api               "1.8.0"]
                  [clj-time                  "0.15.2"]
                  [org.clojure/java.jdbc     "0.7.12"]
                  [org.postgresql/postgresql "42.5.1"]]

@@ -2,9 +2,11 @@
 
 A Clojure library designed to breed images via twitter and other social media.  
 
-Since it was written in 2015, this library has grown and matured into a larger system of parts.  This is the original piece that creates and posts images to Twitter.  There is now a website http://tweegeemee.com, an underlying database and as of December, 2022 posting to Mastodon has begun.  While those other pieces are  not open source, this code will remain open source.
+Since it was written in 2015, this library has grown and matured into a larger system of parts.  There is now a website http://tweegeemee.com, an underlying database and as of December, 2022 posting to Mastodon has begun.  While those other pieces are not open source, this code will remain open source.
 
 Adding Mastodon support is forcing me to rearchitect a few things to use a real database instead of the current gist-based "database" that I have historically used.  I'm calling this "Version 2.0" and we wil be deprecating the gist file use going forward.  Docs probably won't be updated to keep up with these changes...unless I get requests from interested developers.
+
+UPDATE: as of Version 2.3.0 I no longer include the code to post to Twitter and I no longer read data from gists either.  I'm using a real DB for the gist function and just put images into the images directory.  Look back in the git revision history to before V2.0 if you want to see that code.
 
 ## Background
 
