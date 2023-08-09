@@ -180,10 +180,11 @@
                        [;;"SELECT * FROM items WHERE random_seed = ? ORDER BY key DESC LIMIT ?"
                         ;; updated to use the items + scores table
                         "SELECT sum(scores.favorite_count) + 3*sum(scores.retweet_count) as score,
+                                items.name as name,
                                 items.code as code
                          FROM items INNER JOIN scores ON items.key = scores.item_key
                          WHERE items.random_seed = ? 
-                         GROUP BY items.key, items.code
+                         GROUP BY items.key, items.name, items.code
                          ORDER BY items.key DESC 
                          LIMIT ?"
                         random-seed NUM-PARENT-TWEETS])
